@@ -230,4 +230,24 @@ return [
 
     'serialization' => 'json',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Realm Session Overrides
+    |--------------------------------------------------------------------------
+    |
+    | Not read by Laravel's session subsystem directly — App\Http\Middleware\
+    | UseSessionRealm swaps 'cookie'/'table'/'lifetime' above to these values
+    | before Illuminate\Session\Middleware\StartSession resolves the session
+    | store, for any request routed through the admin realm. This is what
+    | gives the admin realm a physically separate session cookie and table
+    | from the customer realm above. See MIGRATION_PLAN.md ADR-4 and ADR-12.
+    |
+    */
+
+    'admin' => [
+        'cookie' => env('ADMIN_SESSION_COOKIE', 'hetkin_admin_session'),
+        'table' => 'admin_sessions',
+        'lifetime' => (int) env('ADMIN_SESSION_LIFETIME', 480),
+    ],
+
 ];

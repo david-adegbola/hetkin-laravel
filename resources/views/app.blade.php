@@ -4,13 +4,20 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        {{--
+            Static default matches the Next.js app's metadata.title.default
+            (src/app/layout.tsx). Inertia's client-side title() resolver
+            (resources/js/app.tsx) overwrites this on every navigation with
+            the per-page title, applying the "%s · Hetkin" template — this
+            tag is only what a crawler or a hard-reload's first paint sees
+            before hydration.
+        --}}
+        <title inertia>Hetkin — Run production when electricity is cheap</title>
+        <meta name="description" content="Hetkin compares your production schedule against real electricity prices and shows you exactly which shifts to move. We only get paid when you save.">
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        {{-- Fonts are self-hosted via resources/css/fonts.css (imported from app.css) — no external font request. --}}
 
-        <!-- Scripts -->
         @routes
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])

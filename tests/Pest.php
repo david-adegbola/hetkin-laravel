@@ -18,6 +18,16 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
 
+// No RefreshDatabase here deliberately: RefreshDatabase wraps every test in
+// its own outer DB transaction for fast rollback-based isolation, which
+// makes DB::transactionLevel() === 0 unreachable from a 'Feature' test —
+// exactly the condition AuditLogServiceGuardTest needs to exercise
+// (App\Domain\Audit\Services\AuditLogService::record() refusing to run
+// outside an active transaction). Still boots the full app (TestCase), just
+// without the ambient transaction.
+pest()->extend(TestCase::class)
+    ->in('Unit');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

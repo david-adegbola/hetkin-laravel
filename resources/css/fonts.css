@@ -1,0 +1,30 @@
+/*
+ * Self-hosted fonts — matches the Next.js app's next/font setup (Geist Sans
+ * as the primary typeface, Inter self-hosted as the fallback file rather
+ * than a runtime Google Fonts request; see src/app/layout.tsx in the
+ * original app for the rationale). Both files are single variable-weight
+ * woff2s (one file covers the whole weight axis), vendored into
+ * resources/fonts/ rather than pulled from node_modules at build time so
+ * Vite's asset pipeline can hash/cache-bust them like any other static
+ * asset.
+ *
+ * Provenance, for re-vendoring when either font updates:
+ *   geist-sans-variable.woff2  ← npm:geist  dist/fonts/geist-sans/Geist-Variable.woff2
+ *   inter-latin-variable.woff2 ← npm:@fontsource-variable/inter  files/inter-latin-wght-normal.woff2
+ */
+
+@font-face {
+  font-family: "Geist Sans";
+  src: url("../fonts/geist-sans-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/inter-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

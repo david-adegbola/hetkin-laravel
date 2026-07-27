@@ -1,27 +1,19 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+// TODO(Stage 12 — Marketing site): the real homepage. Deliberately not
+// stubbed with placeholder content here — see MIGRATION_PLAN.md's staging
+// rationale. '/' is intentionally unrouted until that stage.
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+Route::middleware('auth:web')->group(function () {
+    // TODO(Stage 5 — Scheduling/Portal shell): replace with the real
+    // customer portal. Placeholder only proves the customer guard end to
+    // end (MIGRATION_PLAN.md ADR-10).
+    Route::get('/dashboard', fn () => Inertia::render('Portal/DashboardPlaceholder'))
+        ->name('dashboard');
 });
 
 require __DIR__.'/auth.php';
+require __DIR__.'/admin.php';
