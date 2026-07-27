@@ -10,6 +10,26 @@ This is a rewrite of behavior, not a redesign. See the mission brief in
 conversation history for the full constraint set; the short version: if a
 signed-in customer or admin notices the app changed, that's a bug.
 
+## Local Verification
+
+```bash
+composer install
+cp .env.example .env   # first time only — then set DB_* to a real Postgres instance
+php artisan key:generate  # first time only
+npm install
+npm run build              # MUST run before `php artisan test` — see note below
+php artisan migrate:fresh --force
+php artisan test
+```
+
+**Order matters**: `npm run build` has to run before `php artisan test`,
+not after. Every GET route that renders an Inertia page requires
+`public/build/manifest.json` to exist — `HandleInertiaRequests` reads it via
+Laravel's Vite helper on every such request, tests included. Running tests
+first against a missing manifest fails every "screen can be rendered" test
+with a 500 (`Illuminate\Foundation\ViteManifestNotFoundException`), not a
+real application bug — if you see that specific exception, this is why.
+
 ## Dependency Graph
 
 ```
