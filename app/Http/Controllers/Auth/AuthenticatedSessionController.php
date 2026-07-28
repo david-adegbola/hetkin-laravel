@@ -50,11 +50,10 @@ class AuthenticatedSessionController extends Controller
         // Host-aware since Stage 2 (MIGRATION_PLAN.md ADR-21): a login
         // submitted on dashboard.{domain} lands back on that same
         // subdomain's bare root, not the main domain's prefixed
-        // "/dashboard" — matches v2's post-login push.
-        // TODO(Stage 5 — Scheduling/Portal shell): replace with the real
-        // portal redirect once it exists.
+        // "/dashboard" — matches v2's post-login push. Real portal
+        // destination since Stage 5 (routes/portal.php).
         $target = $request->getHost() === 'dashboard.'.config('app.domain')
-            ? route('portal.home', absolute: false)
+            ? route('portal.dashboard', absolute: false)
             : route('dashboard', absolute: false);
 
         return redirect()->intended($target);

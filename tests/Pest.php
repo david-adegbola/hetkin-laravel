@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Organizations\Models\Member;
+use App\Domain\Organizations\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -121,4 +123,22 @@ function currentSessionIdFor(string $userId): string
     return DB::table('sessions')
         ->where('user_id', $userId)
         ->value('id');
+}
+
+/**
+ * A signed-in customer with a real organization membership — the
+ * precondition every portal route needs (App\Http\Middleware\
+ * ResolveOrganizationContext redirects to sign-in without one, matching
+ * v2's requirePortalContext()). Shared here so Portal controller/policy
+ * tests don't each hand-roll the same three-row setup.
+ *
+ * @return array{user: User, organization: Organization}
+ */
+function portalUser(): array
+{
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+    Member::factory()->for($user)->for($organization, 'organization')->create();
+
+    return ['user' => $user, 'organization' => $organization];
 }

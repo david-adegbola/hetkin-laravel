@@ -18,6 +18,20 @@ export interface AdminUser {
     active: boolean;
 }
 
+export type OrganizationStatus = 'PILOT' | 'ACTIVE' | 'PAUSED' | 'CHURNED';
+
+/**
+ * Shared only on portal routes (App\Http\Middleware\
+ * ResolveOrganizationContext), never globally — optional here rather than
+ * always-present, unlike `auth`/`subdomain`.
+ */
+export interface PortalOrganization {
+    id: string;
+    name: string;
+    status: OrganizationStatus;
+    process_type: string | null;
+}
+
 /**
  * `user`/`admin` are both nullable — see App\Http\Middleware\
  * HandleInertiaRequests: exactly one is ever non-null on a given page,
@@ -35,4 +49,5 @@ export type PageProps<
         isDashboardHost: boolean;
         isAdminHost: boolean;
     };
+    organization?: PortalOrganization;
 };

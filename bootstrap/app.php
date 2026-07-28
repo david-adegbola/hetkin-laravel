@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ResolveOrganizationContext;
 use App\Http\Middleware\UseSessionRealm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -35,6 +36,15 @@ return Application::configure(basePath: dirname(__DIR__))
             before: StartSession::class,
             prepend: UseSessionRealm::class,
         );
+
+        // 'organization.context' — see App\Http\Middleware\
+        // ResolveOrganizationContext's docblock. Applied per-route-group
+        // (routes/portal.php), not globally: it needs an authenticated
+        // web-guard user to resolve an organization for, so it's meaningless
+        // outside the portal.
+        $middleware->alias([
+            'organization.context' => ResolveOrganizationContext::class,
+        ]);
 
         // Two isolated auth realms (MIGRATION_PLAN.md ADR-4): an
         // unauthenticated request to an /admin/* route must land on the
@@ -79,7 +89,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             if ($host === 'dashboard.'.config('app.domain')) {
-                return route('portal.home');
+                return route('portal.dashboard');
             }
 
             return route('dashboard');

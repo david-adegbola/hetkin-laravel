@@ -65,7 +65,8 @@ review) — building it earlier would mean building it twice.
 | 2. Routing / multi-tenancy plumbing | **Complete** | ADR-21 |
 | 3. Organizations | **Complete** | ADR-25..ADR-28 |
 | 4. Metering | **Complete** | ADR-29..ADR-31 |
-| 5–12 | Not started | |
+| 5. Scheduling + portal shell | **Complete** | ADR-32..ADR-36 |
+| 6–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -733,3 +734,104 @@ standing pattern for any future Action that receives an explicit
 Organization and needs to query a `BelongsToOrganization` model**: bind
 `CurrentOrganization` at the top of `execute()`, restore the previous
 value in a `finally`, same shape every time.
+
+---
+
+## Stage 5: Scheduling + Portal Shell
+
+### ADR-32: `ScheduleBlock` is scoped through `ProductionSchedule`/`Site`, not directly — same shape as ADR-29
+
+`production_schedule` has a direct `organizationId` and is in v2's RLS
+policy list; `schedule_block` has neither (only `scheduleId`/`siteId`, and
+absent from that same list) — confirmed the same way ADR-29 was for
+`metering_point`/`meter_reading`. `ProductionSchedule` gets
+`BelongsToOrganization`; `ScheduleBlock` gets plain `belongsTo` relations
+only. `SchedulePolicy` follows `OrganizationPolicy`'s membership-only
+shape (ADR-25) — no `ScheduleBlockPolicy` was added, since nothing in v2
+authorizes a single block independent of its schedule (mirroring the
+decision not to add a `MeterReadingPolicy` in Stage 4).
+
+### ADR-33: The portal overview and sidebar nav are an honest subset, not an approximation
+
+v2's dashboard overview (`src/app/(portal)/dashboard/page.tsx`) and full
+sidebar (Reports, Billing, Team & Permissions, Support, alongside
+Schedule/Data) both depend on domains this port hasn't built yet:
+`VerificationRecord`/`RecommendationDecision`/`Recommendation`/`Alert`
+(Stages 6, 7, 10) for the stat cards and recommendation/alert panels, and
+whole pages (Reports, Billing, Team, Support) that don't exist as routes
+in this app at all yet. Two options were considered: approximate those
+pieces now (fake zero-state cards, nav links to pages that don't exist),
+or scope this stage honestly to what it actually built. The second was
+chosen — `App\Http\Controllers\Portal\DashboardController` renders a
+plain "get started" card linking to Schedule/Data instead of stat cards
+that would show identical zeros whether nothing has happened yet or
+something is broken; `PortalLayout`'s nav lists only Dashboard/Schedule/
+Data. A nav link to a 404 is worse than v2's actual behavior, not
+equivalent to it — extend both as each later stage lands its real page,
+the same way `routes/portal.php` itself is meant to grow.
+
+### ADR-34: `routes/portal.php`'s shared closure extends ADR-21's dual-registration pattern
+
+ADR-21 (Stage 2) deliberately rejected a shared-closure/file-mount
+approach for `routes/domains.php`'s `dashboard.*`/`admin.*` groups because
+sign-in has a real asymmetry (bare on both the main domain and the
+subdomain, unlike everything else that's prefix-vs-bare). Portal pages
+have no such asymmetry — every route in `routes/portal.php` needs the
+exact same prefix-or-bare treatment uniformly — so the trade-off ADR-21
+flagged as "revisit if Stage 5 makes the duplication genuinely painful"
+resolved in favor of a shared closure this time: one file, `require`'d
+(not `require_once` — safe, since it declares no named symbol) from both
+`routes/web.php` (`Route::prefix('dashboard')->group(require ...)`,
+keeping the legacy bare `dashboard` route name) and `routes/domains.php`
+(`Route::domain(...)->name('portal.')->group(require ...)`, giving
+`portal.dashboard`/`portal.data`/etc.). This also renamed the Stage 2
+placeholder route `portal.home` to `portal.dashboard` for consistency —
+updated everywhere it was referenced (`AuthenticatedSessionController`,
+`bootstrap/app.php`'s redirect closures, `SubdomainRoutingTest`).
+
+### ADR-35: `NavLink`'s per-link pending spinner, deferred from `resources/js/app.tsx` until this stage
+
+`app.tsx`'s `progress: false` setting has carried a comment since Stage 1
+saying the per-link pending-state treatment "is ported as a React
+component in a later stage" instead of Inertia's default top-of-page
+progress bar — this is that stage. Ports v2's `NavLink.tsx` beta-feedback
+reasoning exactly (an instant, exact-tap-location spinner so a click
+doesn't look like it silently failed) using Inertia `<Link>`'s
+`onStart`/`onFinish` event props rather than Next's `useLinkStatus()`
+hook (no equivalent here) — same effect, true only while a visit to that
+specific link's href is in flight.
+
+### ADR-36: A live smoke test caught a real bug the automated suite couldn't — the add-block form never cleared after success
+
+`Schedule.tsx`'s `AddBlockForm` originally cleared itself via a
+`useEffect` watching Inertia's `wasSuccessful` flag:
+
+```tsx
+useEffect(() => {
+  if (wasSuccessful) { reset(); formRef.current?.reset(); }
+}, [wasSuccessful]);
+```
+
+This compiled, typechecked, and every PHP-level test (which only asserts
+on the HTTP response/session) passed — but a real browser walkthrough
+(this module's established practice since the Account Security module's
+ADR-20) showed the form still full of the just-submitted values after a
+successful "Add block." Root cause was never fully isolated (something
+about `wasSuccessful`'s transition not reliably re-triggering the effect
+for this specific same-page `post()` → `back()` redirect round trip), but
+the fix is straightforward and more direct regardless: pass an
+`onSuccess` callback to `post()` itself rather than reacting to state
+after the fact —
+
+```tsx
+post(`${base}/schedule`, { preserveScroll: true, onSuccess: () => reset() });
+```
+
+— which is also the pattern `DataUpload.tsx` already used and never had
+the problem. Standing guidance for future stages: prefer `post()`'s own
+`onSuccess`/`onError` callbacks over a `useEffect` keyed on `wasSuccessful`/
+`recentlySuccessful` for this kind of "clear the form after a successful
+submit" behavior — it's both simpler and, per this incident, more
+reliably correct. This is also further evidence for ADR-20's broader
+point: PHP-level test coverage passing is necessary but not sufficient for
+client-side behavior — the live walkthrough is what actually caught this.

@@ -49,9 +49,7 @@ Route::domain('dashboard.'.config('app.domain'))->group(function () {
             ->name('portal.login.attempt');
     });
 
-    Route::middleware('auth:web')
-        ->get('/', fn () => Inertia::render('Portal/DashboardPlaceholder'))
-        ->name('portal.home');
+    Route::name('portal.')->group(require __DIR__.'/portal.php');
 });
 
 Route::domain('admin.'.config('app.domain'))

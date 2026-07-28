@@ -21,12 +21,12 @@ test('the customer sign-in page renders bare on the dashboard subdomain', functi
 });
 
 test('an authenticated customer sees the portal root bare on the dashboard subdomain', function () {
-    $user = User::factory()->create();
+    ['user' => $user] = portalUser();
 
     $this->actingAs($user, 'web')
         ->get('http://dashboard.localhost/')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Portal/DashboardPlaceholder'));
+        ->assertInertia(fn ($page) => $page->component('Portal/Dashboard'));
 });
 
 test('a guest hitting the dashboard subdomain root is sent to that subdomain\'s own sign-in, not the main domain\'s', function () {
@@ -79,7 +79,7 @@ test('logging in on the admin subdomain lands back on that subdomain, not the ma
 });
 
 test('the main-domain prefixed routes are untouched by the subdomain groups', function () {
-    $user = User::factory()->create();
+    ['user' => $user] = portalUser();
     $admin = AdminUser::factory()->create();
 
     $this->get('/sign-in')->assertOk();
@@ -101,7 +101,7 @@ test('a customer session from the dashboard subdomain does not satisfy the admin
 // header comment / MIGRATION_PLAN.md ADR-19 for why a single test chaining
 // two $this->get() calls with different hosts is unreliable here.
 test('the shared subdomain prop flags the dashboard subdomain', function () {
-    $user = User::factory()->create();
+    ['user' => $user] = portalUser();
 
     $this->actingAs($user, 'web')
         ->get('http://dashboard.localhost/')
@@ -111,7 +111,7 @@ test('the shared subdomain prop flags the dashboard subdomain', function () {
 });
 
 test('the shared subdomain prop does not flag the main domain', function () {
-    $user = User::factory()->create();
+    ['user' => $user] = portalUser();
 
     $this->actingAs($user, 'web')
         ->get('/dashboard')

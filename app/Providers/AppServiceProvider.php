@@ -9,10 +9,12 @@ use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Member;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Policies\InvitationPolicy;
 use App\Policies\MemberPolicy;
 use App\Policies\MeteringPointPolicy;
 use App\Policies\OrganizationPolicy;
+use App\Policies\SchedulePolicy;
 use App\Policies\SessionPolicy;
 use App\Policies\SitePolicy;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -83,5 +85,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Invitation::class, InvitationPolicy::class);
         Gate::policy(Site::class, SitePolicy::class);
         Gate::policy(MeteringPoint::class, MeteringPointPolicy::class);
+        Gate::policy(ProductionSchedule::class, SchedulePolicy::class);
     }
 }
