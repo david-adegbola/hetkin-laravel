@@ -3,7 +3,14 @@ import NavLink from '@/Components/portal/NavLink';
 import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { CalendarClock, Database, LayoutDashboard, Menu } from 'lucide-react';
+import {
+    CalendarClock,
+    Database,
+    FileText,
+    LayoutDashboard,
+    Menu,
+    Receipt,
+} from 'lucide-react';
 import { ReactNode } from 'react';
 
 /**
@@ -34,11 +41,12 @@ const LOGO_LINK_CLASSES =
  * persistent layout means Inertia only swaps `children` on navigation.
  *
  * Nav items are a deliberate SUBSET of v2's full sidebar (which also has
- * Reports, Billing, Team & Permissions, Support) — this Laravel port is
- * itself mid-migration, and those pages don't exist yet (their own later
- * stages). Showing a nav link to a 404 would be worse than v2's actual
- * behavior, not equivalent to it, so the nav only lists what Stage 5
- * actually built. See MIGRATION_PLAN.md ADR-33; extend this list as later
+ * Team & Permissions and Support) — this Laravel port is itself
+ * mid-migration, and those pages don't exist yet (their own later stages).
+ * Showing a nav link to a 404 would be worse than v2's actual behavior,
+ * not equivalent to it, so the nav only lists what's actually been built
+ * so far: Dashboard/Schedule/Data (Stage 5) and, as of Stage 7,
+ * Reports/Billing. See MIGRATION_PLAN.md ADR-33; extend this list as later
  * stages add real pages, the same way routes/portal.php is extended.
  */
 export default function PortalLayout({ children }: { children: ReactNode }) {
@@ -77,6 +85,30 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             exact: false,
             icon: (
                 <Database
+                    aria-hidden
+                    className="h-4 w-4 flex-shrink-0"
+                    strokeWidth={2}
+                />
+            ),
+        },
+        {
+            href: `${base}/reports`,
+            label: 'Reports',
+            exact: false,
+            icon: (
+                <FileText
+                    aria-hidden
+                    className="h-4 w-4 flex-shrink-0"
+                    strokeWidth={2}
+                />
+            ),
+        },
+        {
+            href: `${base}/billing`,
+            label: 'Billing',
+            exact: false,
+            icon: (
+                <Receipt
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}

@@ -67,7 +67,8 @@ review) — building it earlier would mean building it twice.
 | 4. Metering | **Complete** | ADR-29..ADR-31 |
 | 5. Scheduling + portal shell | **Complete** | ADR-32..ADR-36 |
 | 6. Optimization & recommendations | **Complete** | ADR-37..ADR-40 |
-| 7–12 | Not started | |
+| 7. Baseline / Savings Assessment / Verification / Billing | **Complete** | ADR-41..ADR-45 |
+| 8–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -940,3 +941,159 @@ API. This is not a bug introduced by this port: v2's own
 unchanged, matching the "rewrite behavior, not redesign" mandate — if
 this is ever worth fixing, it should be fixed in both codebases
 deliberately, not silently diverge here.
+
+## Stage 7: Baseline / Savings Assessment / Verification / Billing
+
+### ADR-41: All four Stage 7 tables are RLS-listed and scoped — unlike every prior stage's mixed picture
+
+Checked v2's actual RLS policy table list, same method as ADR-29/32/37:
+`baseline`, `savings_assessment`, `verification_record`, and `invoice` are
+all present (`ARRAY['member', 'invitation', 'organization_note', 'site',
+'production_schedule', 'optimization_run', 'baseline',
+'savings_assessment', 'verification_record', 'invoice', 'alert']`), each
+with a direct `organization_id` column in the source schema. So, unlike
+Metering/Scheduling/Optimization (each of which had one scoped "root"
+table and one-or-more child tables scoped only transitively), every model
+this stage introduces gets `BelongsToOrganization` directly — there was no
+"which one gets the trait" judgment call to make this time.
+
+### ADR-42: v2's own dead-code/gaps are ported as-is, not silently "fixed" — flagged explicitly instead
+
+Research into v2's actual behavior (not just its schema/comments) surfaced
+three things worth calling out before anyone assumes they're oversights
+introduced by this port:
+
+1. **`Baseline.status = SUPERSEDED` is dead code in v2.** The enum value
+   exists, the schema comment describes "superseding creates a new row,"
+   but no code path anywhere ever sets it. `GenerateSavingsAssessmentAction`
+   (ported from `generateSavingsAssessment`) unconditionally creates a
+   fresh `DRAFT` `Baseline` on every call, even when a `LOCKED` baseline
+   already exists for the org — exactly like v2. `SUPERSEDED` is carried
+   forward on the `BaselineStatus` enum for schema fidelity, but nothing
+   in this port transitions to it either.
+2. **`SavingsAssessmentStatus::Delivered`/`::Accepted` are dead code too**
+   — every assessment stays `Draft` forever in both codebases.
+3. **Multiple `LOCKED` baselines per organization are possible** — locking
+   (`LockBaselineAction`) is idempotent per-row, but nothing prevents
+   locking two different `DRAFT` baselines for the same org.
+   `RunVerificationAction` resolves this the same way
+   `runVerificationJob` does: `orderByDesc('locked_at')->first()` — most-
+   recently-locked wins, silently, if it ever happens.
+
+All three are deliberate fidelity choices, not oversights: the mandate is
+"rewrite behavior, not redesign," and quietly implementing real
+superseding or a single-locked-baseline constraint would be exactly the
+kind of behavior change ("if a signed-in customer or admin notices the app
+changed, that's a bug") the mission brief rules out. If real superseding
+is ever wanted, it should be a deliberate product decision made in v2
+first, then ported — not something this migration introduces as a
+side-effect of "obviously correct" cleanup.
+
+### ADR-43: Admin-triggered Actions are fully built and tested this stage; their controllers/routes/pages are not — that's Stage 9's job
+
+Roughly half of this stage's Actions are customer-triggered
+(`GenerateSavingsAssessmentAction`, reachable from the portal's Reports
+page) and half are admin-only in v2 (`LockBaselineAction`,
+`ConfirmShadowReviewAction`/`ApproveLiveAction`/`DisputeRecordAction`/
+`ReopenDisputedAction`, `GenerateInvoiceAction`/`IssueInvoiceAction`/
+`VoidInvoiceAction`/`MarkInvoicePaidAction`, and
+`UpdateOrganizationPricingAction`). The dependency graph puts "Admin
+console (orgs, baselines, verification, invoices, pilots, team, audit-log
+viewer, job monitor)" at Stage 9, deliberately after every domain it
+reads/acts on — building it piecemeal per-stage would mean building the
+same console twice. So this stage builds and thoroughly tests every
+admin-side Action (they're pure business logic, independent of any
+controller), but wires up NO admin controller, route, or page for any of
+them yet — the same "honest subset" reasoning as ADR-33, extended to admin
+territory for the first time. Stage 9 wires these Actions to real
+`/admin/baselines`, `/admin/verification`, `/admin/invoices` pages; until
+then, exercising them means calling them directly (as this stage's tests,
+and the live-smoke-test in ADR-45, both do).
+
+This also introduces a new pattern this codebase hadn't needed before:
+**genuinely cross-tenant Actions bypass `OrganizationScope` explicitly
+rather than binding `CurrentOrganization`.** Every prior stage's Actions
+either received an explicit `Organization` and bound `CurrentOrganization`
+to it (ADR-31) or ran inside a request that already had one bound
+(portal middleware). An admin action like `LockBaselineAction` or
+`RunVerificationAction` has no single "current organization" — it looks up
+a `Baseline`/`Invoice`/`VerificationRecord` by ID (or iterates every
+organization at once) with no tenant context at all, the same way v2's
+`adminScopedDb()` reads/writes across every org unrestricted. The Laravel
+equivalent is `Model::withoutGlobalScope(OrganizationScope::class)`,
+mirrored on every scoped read/write these Actions perform — a deliberate,
+visible opt-out at each call site, never an accidental one.
+
+`GenerateInvoiceAction` hit the same scoped-eager-load pitfall
+`DecideRecommendationAction` did in Stage 6 (ADR-39): eager-loading
+`VerificationRecord::with('invoice')` in a cross-tenant context with no
+`CurrentOrganization` bound throws (fail-closed `OrganizationScope`,
+ADR-26) instead of correctly resolving "no invoice yet" as `null` — fixed
+the same way, by bypassing the scope explicitly on that specific eager
+load too. Two independent hits across two different domains now firmly
+establish this as a standing pattern to watch for, not a one-off.
+
+### ADR-44: PDF generation via dompdf (HTML/CSS rendering), not a port of v2's pdf-lib hand-coordinate drawing
+
+v2's `src/lib/pdf/savings-assessment-pdf.ts` hand-draws every page with
+`pdf-lib` at fixed pt coordinates — manual rectangles, manual text
+placement, a hand-rolled waterfall-chart renderer, and a WinAnsi
+character-sanitization pass because `pdf-lib`'s standard fonts don't
+support full Unicode. Porting that approach line-for-line would mean
+reimplementing a full coordinate-based layout engine in PHP for
+comparatively little customer-visible benefit: the actual contract a
+customer experiences is "downloading this PDF gives me a correctly
+formatted document with the right numbers," not "these exact pixels are
+in these exact positions."
+
+This port uses `barryvdh/laravel-dompdf` instead: the same
+`SavingsReportViewModelBuilder` view-model (identical to what the web
+report page renders, so the two can never drift, exactly matching v2's
+own reasoning for splitting `loadSavingsReportData`/
+`buildSavingsReportViewModel` from both consumers) feeds a Blade view
+(`resources/views/pdf/savings-assessment.blade.php`) rendered to PDF via
+dompdf's HTML/CSS engine. Consequences of the swap, all deliberate:
+
+- **No WinAnsi sanitization needed** — dompdf/DejaVu Sans supports full
+  UTF-8 natively, so this port's PDF is strictly more permissive on
+  characters than v2's, not less.
+- **Charts are simplified** (CSS width/height-percentage bars, a colored
+  table-cell heatmap, `position: fixed` header/footer with dompdf's
+  `{PAGE_NUM}`/`{PAGE_COUNT}` placeholders) rather than hand-tuned SVG-style
+  drawing — same data, same sections (all 10: cover, executive summary,
+  customer overview, baseline analysis, market analysis, savings
+  assessment, schedule, recommendations, methodology, appendix), simpler
+  mechanism.
+- **The HTTP contract is preserved exactly**: same route shape
+  (`GET /reports/{assessment}/pdf`), same regenerate-on-every-request
+  behavior (nothing cached, `savings_assessments.report_pdf_url` stays
+  permanently `null` — no storage bucket wired up here either), same
+  `Cache-Control: no-store`, same `savings_assessment.pdf_downloaded`
+  audit-log entry, same `hetkin-savings-assessment-{date}.pdf` filename
+  format (date = the assessment's `generated_at`, not "today").
+
+### ADR-45: Live smoke test confirmed the full pipeline end-to-end, including exact golden-dataset figures in a real browser
+
+Following this project's established practice (ADR-20, ADR-36, ADR-40):
+seeded a real organization with 5 days of flat 100 kWh/hour meter data
+against the same 10→240 EUR/MWh step-10 price curve the unit tests use,
+signed in as that org's user, and walked Reports → Generate savings
+assessment → report detail page → PDF download → Billing. Every number
+matched the hand-derived golden dataset exactly as rendered in the
+browser (€109,500.00/yr baseline → €81,906.00/yr optimized, 25.2% cost
+reduction, 9.0x ROI, €24,834.60 net customer savings after a 10% revenue
+share) — the KPI cards, waterfall bars, load-profile chart, and price
+heatmap all rendered correctly against real computed data, not fixtures.
+The PDF route returned `200 OK` with a real download.
+
+Since Stage 9 (Admin console) doesn't exist yet, the verification/invoice
+half of the flow was exercised by calling `ConfirmShadowReviewAction`→
+`ApproveLiveAction`→`GenerateInvoiceAction`→`IssueInvoiceAction` directly
+(the same way Stage 9's admin controllers will call them) rather than
+through any UI — the Billing page correctly rendered the resulting
+invoice (base fee + 10% of verified savings, "issued" status) once
+seeded this way. This matches real-world v2 behavior too: a brand-new
+pilot organization's Billing page is genuinely empty until an admin has
+locked a baseline and walked a verification record through shadow
+review — that's not a gap in this port, it's the intended state machine
+working as designed.

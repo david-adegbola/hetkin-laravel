@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\Portal\BillingController;
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\DataController;
 use App\Http\Controllers\Portal\RecommendationController;
+use App\Http\Controllers\Portal\ReportController;
 use App\Http\Controllers\Portal\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,5 +52,12 @@ return function (): void {
 
         Route::post('recommendations/{recommendation}/decide', [RecommendationController::class, 'decide'])
             ->name('recommendations.decide');
+
+        Route::get('reports', [ReportController::class, 'index'])->name('reports');
+        Route::post('reports/generate', [ReportController::class, 'generate'])->name('reports.generate');
+        Route::get('reports/{assessment}', [ReportController::class, 'show'])->name('reports.show');
+        Route::get('reports/{assessment}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
+
+        Route::get('billing', [BillingController::class, 'index'])->name('billing');
     });
 };

@@ -3,6 +3,10 @@
 namespace App\Providers;
 
 use App\Domain\Auth\Models\SessionRecord;
+use App\Domain\Billing\Contracts\SavingsCalculationService;
+use App\Domain\Billing\Contracts\VerificationCalculationService;
+use App\Domain\Billing\Strategies\ProvisionalHeuristicStrategy;
+use App\Domain\Billing\Strategies\ProvisionalPeriodComparisonStrategy;
 use App\Domain\Metering\Models\MeteringPoint;
 use App\Domain\Metering\Models\Site;
 use App\Domain\Optimization\Contracts\RecommendationEngine;
@@ -47,6 +51,13 @@ class AppServiceProvider extends ServiceProvider
         // equivalent is binding the interface once, here, rather than a
         // factory function every caller invokes.
         $this->app->bind(RecommendationEngine::class, ProvisionalWindowShiftStrategy::class);
+
+        // Same single-swap-point pattern as RecommendationEngine above —
+        // src/lib/savings/index.ts's getSavingsCalculationService() and
+        // src/lib/verification/index.ts's getVerificationCalculationService()
+        // (MIGRATION_PLAN.md ADR-38).
+        $this->app->bind(SavingsCalculationService::class, ProvisionalHeuristicStrategy::class);
+        $this->app->bind(VerificationCalculationService::class, ProvisionalPeriodComparisonStrategy::class);
     }
 
     /**
