@@ -4,8 +4,8 @@ import { Card } from '@/Components/ui/Card';
 import { FieldError, Input, Label } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { Link, useForm } from '@inertiajs/react';
-import { FormEventHandler, ReactElement } from 'react';
+import { Link, router, useForm } from '@inertiajs/react';
+import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface ScheduleBlockRow {
     id: string;
@@ -19,7 +19,17 @@ interface ScheduleBlockRow {
 interface ScheduleData {
     version: number;
     status: string;
+    hasBlocksWithEstimatedKwh: boolean;
     blocks: ScheduleBlockRow[];
+}
+
+interface OptimizationStatus {
+    recommendationCount: number;
+}
+
+interface ApplyDecisionsStatus {
+    newVersion: number;
+    blocksChanged: number;
 }
 
 function AddBlockForm({ base }: { base: string }) {
@@ -98,17 +108,115 @@ function AddBlockForm({ base }: { base: string }) {
     );
 }
 
+function RunOptimizationButton({
+    base,
+    optimizationStatus,
+}: {
+    base: string;
+    optimizationStatus?: OptimizationStatus;
+}) {
+    const [processing, setProcessing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    function submit() {
+        setProcessing(true);
+        setError(null);
+        router.post(
+            `${base}/schedule/optimize`,
+            {},
+            {
+                preserveScroll: true,
+                onError: (errors) => setError(errors.optimization ?? null),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    }
+
+    return (
+        <div>
+            <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={submit}
+                disabled={processing}
+            >
+                {processing ? 'Running…' : 'Run optimization'}
+            </Button>
+            <FieldError>{error}</FieldError>
+            {optimizationStatus && (
+                <p className="text-success mt-1.5 text-xs font-medium">
+                    {optimizationStatus.recommendationCount > 0
+                        ? `${optimizationStatus.recommendationCount} recommendation${optimizationStatus.recommendationCount === 1 ? '' : 's'} generated — see the dashboard.`
+                        : 'No cheaper windows found for the current schedule.'}
+                </p>
+            )}
+        </div>
+    );
+}
+
+function ApplyDecisionsButton({
+    base,
+    applyDecisionsStatus,
+}: {
+    base: string;
+    applyDecisionsStatus?: ApplyDecisionsStatus;
+}) {
+    const [processing, setProcessing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    function submit() {
+        setProcessing(true);
+        setError(null);
+        router.post(
+            `${base}/schedule/apply-decisions`,
+            {},
+            {
+                preserveScroll: true,
+                onError: (errors) => setError(errors.applyDecisions ?? null),
+                onFinish: () => setProcessing(false),
+            },
+        );
+    }
+
+    return (
+        <div>
+            <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={submit}
+                disabled={processing}
+            >
+                {processing ? 'Applying…' : 'Apply decisions to a new version'}
+            </Button>
+            <FieldError>{error}</FieldError>
+            {applyDecisionsStatus && (
+                <p className="text-success mt-1.5 text-xs font-medium">
+                    Created version {applyDecisionsStatus.newVersion} —{' '}
+                    {applyDecisionsStatus.blocksChanged} block(s) updated.
+                </p>
+            )}
+        </div>
+    );
+}
+
 /**
  * Mirrors the Next.js app's src/app/(portal)/dashboard/schedule/page.tsx —
- * minus RunOptimizationButton/ApplyDecisionsButton and the
- * pending-decision-count display, which depend on the Optimization/
- * Recommendations domain (Stage 6, not built yet). See
- * App\Http\Controllers\Portal\ScheduleController's docblock.
+ * including RunOptimizationButton/ApplyDecisionsButton and the
+ * pending-decision-count display, now that the Optimization/
+ * Recommendations domain exists (Stage 6).
  */
 export default function Schedule({
     schedule,
+    pendingDecisionCount,
+    optimizationStatus,
+    applyDecisionsStatus,
 }: {
     schedule: ScheduleData | null;
+    pendingDecisionCount: number;
+    optimizationStatus?: OptimizationStatus;
+    applyDecisionsStatus?: ApplyDecisionsStatus;
 }) {
     const base = usePortalBasePath();
 
@@ -146,7 +254,33 @@ export default function Schedule({
                                 View history
                             </Link>
                         </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <RunOptimizationButton
+                                base={base}
+                                optimizationStatus={optimizationStatus}
+                            />
+                            {pendingDecisionCount > 0 && (
+                                <ApplyDecisionsButton
+                                    base={base}
+                                    applyDecisionsStatus={applyDecisionsStatus}
+                                />
+                            )}
+                            {!schedule.hasBlocksWithEstimatedKwh && (
+                                <p className="text-text-secondary mt-1.5 text-xs">
+                                    Add estimated energy use to at least one
+                                    block to run optimization.
+                                </p>
+                            )}
+                        </div>
                     </div>
+                    {pendingDecisionCount > 0 && (
+                        <p className="text-text-secondary mb-3 text-xs">
+                            {pendingDecisionCount} accepted/partially-adopted
+                            recommendation
+                            {pendingDecisionCount === 1 ? '' : 's'} not yet
+                            applied to the schedule.
+                        </p>
+                    )}
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead className="border-border text-text-secondary border-b text-xs font-semibold uppercase">

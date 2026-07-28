@@ -1,5 +1,11 @@
 <?php
 
+use App\Domain\Optimization\Models\OptimizationRun;
+use App\Domain\Optimization\Models\Recommendation;
+use App\Domain\Optimization\Models\RecommendationDecision;
+use App\Domain\Organizations\CurrentOrganization;
+use App\Domain\Organizations\Models\Organization;
+
 test('a member sees the portal dashboard', function () {
     ['user' => $user] = portalUser();
 
@@ -16,4 +22,40 @@ test('the dashboard is also reachable bare on the dashboard subdomain', function
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page->component('Portal/Dashboard'));
+});
+
+test('the dashboard lists up to 3 of the organization\'s most recent recommendations', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+    $run = OptimizationRun::factory()->for($organization, 'organization')->create();
+    Recommendation::factory()->for($run, 'optimizationRun')->count(4)->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page->has('recentRecommendations', 3));
+});
+
+test('the dashboard never shows another organization\'s recommendations', function () {
+    ['user' => $user] = portalUser();
+    $otherOrganization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($otherOrganization);
+    $run = OptimizationRun::factory()->for($otherOrganization, 'organization')->create();
+    Recommendation::factory()->for($run, 'optimizationRun')->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page->has('recentRecommendations', 0));
+});
+
+test('a decided recommendation includes its decision', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+    $run = OptimizationRun::factory()->for($organization, 'organization')->create();
+    $recommendation = Recommendation::factory()->for($run, 'optimizationRun')->create();
+    RecommendationDecision::factory()->for($recommendation)->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('recentRecommendations.0.decision.decision', 'ACCEPTED'));
 });

@@ -3,6 +3,7 @@
 namespace App\Domain\Optimization\Strategies;
 
 use App\Domain\Optimization\Contracts\RecommendationEngine;
+use App\Domain\Optimization\DTOs\PricePoint;
 use App\Domain\Optimization\DTOs\RecommendationEngineInput;
 use App\Domain\Optimization\DTOs\RecommendationEngineResult;
 use App\Domain\Optimization\DTOs\RecommendationOutput;
@@ -53,7 +54,7 @@ class ProvisionalWindowShiftStrategy implements RecommendationEngine
 
     public function generate(RecommendationEngineInput $input): RecommendationEngineResult
     {
-        /** @var array<string, array<int, \App\Domain\Optimization\DTOs\PricePoint>> $pricesByDay */
+        /** @var array<string, array<int, PricePoint>> $pricesByDay */
         $pricesByDay = [];
         foreach ($input->prices as $price) {
             $pricesByDay[$this->dayKey($price->hourStart)][] = $price;

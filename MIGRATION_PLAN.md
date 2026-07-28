@@ -66,7 +66,8 @@ review) — building it earlier would mean building it twice.
 | 3. Organizations | **Complete** | ADR-25..ADR-28 |
 | 4. Metering | **Complete** | ADR-29..ADR-31 |
 | 5. Scheduling + portal shell | **Complete** | ADR-32..ADR-36 |
-| 6–12 | Not started | |
+| 6. Optimization & recommendations | **Complete** | ADR-37..ADR-40 |
+| 7–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -835,3 +836,107 @@ submit" behavior — it's both simpler and, per this incident, more
 reliably correct. This is also further evidence for ADR-20's broader
 point: PHP-level test coverage passing is necessary but not sufficient for
 client-side behavior — the live walkthrough is what actually caught this.
+
+## Stage 6: Optimization & Recommendations
+
+### ADR-37: `OptimizationRun` is scoped; `Recommendation`/`RecommendationDecision`/`ElectricityPrice` are not — same RLS-list method as ADR-29/ADR-32
+
+Checked v2's actual RLS policy table list
+(`prisma/migrations/20260724230000_row_level_security_policies/migration.sql`)
+rather than guessing from the schema shape alone: `optimization_run` has a
+direct `organizationId` and is on that list, so it gets
+`BelongsToOrganization`. `recommendation` (keyed off `optimizationRunId`,
+optionally `scheduleBlockId`), `recommendation_decision` (keyed off
+`recommendationId`), and `electricity_price` (global reference data, no
+organization concept at all — it's the same ENTSO-E/Nord Pool price curve
+for every tenant in a bidding zone) all have no direct `organizationId`
+and are absent from that list — they get plain `belongsTo` relations only,
+scoped transitively through `optimizationRun`/`recommendation`. Same
+determination method as ADR-29 (Metering) and ADR-32 (Scheduling); by
+Stage 6 this RLS-list check is the established default way to answer
+"does this model get the trait," not a case-by-case judgment call.
+
+### ADR-38: `RecommendationEngine` bound via the container as v2's `getRecommendationEngine()` factory's Laravel-idiomatic equivalent
+
+v2 selects its recommendation-generation algorithm through a single
+factory function, `getRecommendationEngine()`, currently always returning
+`ProvisionalWindowShiftStrategy` — one designated swap point for a future
+second methodology without touching call sites. The Laravel equivalent
+used here is a container binding:
+`$this->app->bind(RecommendationEngine::class, ProvisionalWindowShiftStrategy::class)`
+in `AppServiceProvider::register()`, with `RunOptimizationAction`
+type-hinting the interface rather than the concrete class. Swapping
+methodologies later is a one-line change to the binding, same as v2's
+factory — this is the idiomatic Laravel shape for "one designated place
+decides which implementation," not a reach for DI for its own sake.
+
+`ProvisionalWindowShiftStrategy` itself is a line-for-line port of
+`src/lib/optimization/strategies/provisional-window-shift-strategy.ts`,
+including its exact constants (`MIN_SAVINGS_CENTS = 100`,
+`MIN_IMPROVEMENT_FRACTION = 0.05`) and its UTC-explicit day/hour bucketing
+(`->copy()->utc()->format('Y-m-d')` / `format('G')`, mirroring JS's
+`toISOString().slice(0,10)` / `getUTCHours()`) so the recommendation
+output doesn't silently drift if `config('app.timezone')` is ever set to
+something other than UTC. Verified with an 8-test mirror of the original
+`provisional-window-shift-strategy.test.ts` suite, test-for-test, down to
+exact cents-level savings calculations.
+
+### ADR-39: Eager-loading a scoped relation purely to check organization ownership must explicitly bypass the scope — a recurring pitfall, now a standing pattern
+
+`DecideRecommendationAction` needs to authorize that the recommendation
+being decided belongs to the caller's organization. `Recommendation`
+itself isn't `BelongsToOrganization`-scoped (ADR-37), but its
+`optimizationRun` relation is — and the natural-looking code (bind
+`CurrentOrganization` to the caller's org, then
+`Recommendation::with('optimizationRun')->find($id)`) is a bug: for a
+recommendation belonging to a *different* organization, the fail-closed
+scope (ADR-26) doesn't throw during the eager load — it silently returns
+`optimizationRun` as `null`, because from the scope's point of view
+there's simply no matching row for the *bound* organization. The very
+next line's `$recommendation->optimizationRun->organization_id` then
+crashes on a null-property access instead of ever reaching the intended
+"Recommendation not found" branch. Caught by a real test failure
+(`'a recommendation belonging to another organization is not found'`
+threw the wrong exception type/message), not by inspection.
+
+Fixed by moving the lookup-and-authorize block to run *before* binding
+`CurrentOrganization` at all, and eager-loading the scoped relation with
+the scope explicitly removed for that one query:
+`->with(['optimizationRun' => fn ($q) => $q->withoutGlobalScope(OrganizationScope::class)])`
+— so a cross-organization row comes back as a real (non-null) model that
+then fails an explicit `$recommendation->optimizationRun->organization_id
+!== $organization->id` equality check, reaching the correct "not found"
+exception instead of crashing. This is the same class of bug that hit
+`MeteringPointPolicy` in Stage 4 (ADR-29's module) — two independent
+occurrences now make it a standing rule for this codebase, not a one-off
+fix: **whenever eager-loading a scoped relation for the specific purpose
+of checking whether it belongs to the caller's organization, bypass the
+scope on that load and check the foreign key explicitly.** Loading it
+with the scope active answers a different question ("is there a row for
+*my* organization") than the one being asked ("does *this* row belong to
+my organization") — the two only coincide when the row happens to match,
+which is exactly the case that didn't need the check in the first place.
+
+### ADR-40: Live smoke test confirmed the full optimization → decide → apply flow end-to-end; one display quirk is inherited from v2 unchanged, not a regression
+
+Following this module's established practice (ADR-20, ADR-36), the full
+flow was walked through in a real browser against seeded data: adding a
+schedule block, running optimization, accepting/rejecting/partially
+adopting the resulting recommendations from the dashboard, and applying
+accepted decisions into a new schedule version. All of it worked
+correctly on the first pass — the Accept/Reject/Partial adopt forms
+render and submit right, the pending-decision count and "apply decisions"
+button appear/disappear correctly, and the new schedule version reflects
+the applied changes.
+
+One thing worth recording so a later stage doesn't "fix" it by mistake:
+`RecommendationDecisionButtons`'s "partially adopted — moved to …" text
+renders the adjusted time via `new Date(iso).toLocaleString('en-GB')`,
+which formats in the *browser's* local timezone, not UTC — so the
+displayed hour can differ from the UTC value stored and returned by the
+API. This is not a bug introduced by this port: v2's own
+`RecommendationDecisionButtons.tsx` does the exact same
+`.toLocaleString("en-GB")` call with the same behavior. Ported
+unchanged, matching the "rewrite behavior, not redesign" mandate — if
+this is ever worth fixing, it should be fixed in both codebases
+deliberately, not silently diverge here.

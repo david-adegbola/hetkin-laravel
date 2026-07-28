@@ -15,6 +15,7 @@ use App\Domain\Scheduling\Enums\ScheduleStatus;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Domain\Scheduling\Models\ScheduleBlock;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -75,7 +76,7 @@ class ApplyDecisionsToNewScheduleVersionAction
                 throw new OptimizationActionException('No accepted or partially-adopted recommendations to apply yet.');
             }
 
-            /** @var array<string, array{start_at: \Illuminate\Support\Carbon, end_at: \Illuminate\Support\Carbon}> $overrides */
+            /** @var array<string, array{start_at: Carbon, end_at: Carbon}> $overrides */
             $overrides = [];
             foreach ($decisions as $decision) {
                 $recommendation = $decision->recommendation;
