@@ -1450,6 +1450,230 @@ adjusted in one place to describe this honestly (v2's own copy claims
 "three background jobs run on a schedule and can also be triggered
 manually," which would be misleading here).
 
+## Stage 10: Background Jobs & Scheduler
+
+### ADR-58: Alerts domain — 20-hour dedup window, exact verbatim copy at all four real call sites, `ADOPTION_TREND` ported but deliberately never emitted
+
+`Alert`/`AlertType`/`AlertSeverity` existed in the Stage 9 schema (ADR-51's
+neighbor) but nothing ever wrote a row — this stage is the wiring, not a
+new data model, same relationship Stage 9 had to `OrganizationNote`/
+`JobRun`. `App\Domain\Alerts\Actions\CreateAlertAction` ports
+`createAlert()` exactly: skip creating a new alert if an unread
+(`read_at IS NULL`) one of the same type already exists for the org from
+within a 20-hour window — long enough to cover a daily job's cadence and a
+same-day burst of user actions, without silencing a genuinely new day's
+alert. `read_at` is never set anywhere in this app, in v2 or here — there
+is no "mark as read" feature, a deliberate permanent-unread design, not a
+gap.
+
+Confirmed via direct grep against v2 (not the Explore agent's summary
+alone) that `createAlert()` has exactly four call sites, and copied each
+one's title/body text verbatim rather than paraphrasing:
+
+- `App\Domain\Optimization\Actions\RunOptimizationAction` —
+  `NEW_OPPORTUNITY`/`OPPORTUNITY`, only when `RunOptimizationAction`
+  produces at least one recommendation, fired *after* the write
+  transaction commits (same reasoning as `CreateAlertAction` itself not
+  enforcing a transaction — see its docblock).
+- `App\Domain\Billing\Actions\GenerateSavingsAssessmentAction` —
+  `REPORT_READY`/`INFO`, unconditional on every successful generation.
+- `App\Domain\Billing\Actions\RunVerificationAction` —
+  `VARIANCE_FLAG`/`WARNING`, only when the verification calculation
+  flags variance, per org, inside the existing per-org loop.
+- `App\Domain\Alerts\Actions\GenerateAlertsAction` (this stage) —
+  `DATA_GAP`/`WARNING`, the one alert type with no single triggering
+  event — see ADR-60.
+
+`ADOPTION_TREND` is a real enum case, ported for schema fidelity, but v2
+itself never emits it — designing that threshold well needs real usage
+data neither codebase has from a single design partner yet. Left out here
+for the identical reason, not an oversight.
+
+Research via the Explore agent corrected an initial assumption: alerts are
+not admin-only in v2. The customer portal dashboard has its own "active
+alerts" stat and list. `App\Http\Controllers\Portal\DashboardController`
+now surfaces both — but deliberately *not* the rest of v2's 4-stat
+dashboard grid (verified savings MTD/YTD, adoption rate). Those three
+depend on a `VerificationRecord` aggregate view this port hasn't built,
+a separate, un-blocked gap outside Stage 10's charter; only "active
+alerts" is genuinely part of background-jobs/alerts work, and that
+scope line is documented in both the controller and page docblocks.
+
+### ADR-59: Pricing infra — a `PriceProvider` abstraction over a hand-parsed ENTSO-E XML client, mirroring v2's own regex-based parser rather than adding an XML library
+
+`App\Domain\Pricing\Contracts\PriceProvider` (`source()`, `biddingZone()`,
+`fetchPrices()`) and `App\Domain\Pricing\Services\PriceProviderRegistry`
+port v2's `getPriceProvider(source)` factory exactly — `PriceSource::
+Nordpool` resolves to a clear `RuntimeException` ("not implemented yet"),
+not a silent no-op, matching v2's own reserved-but-unbuilt second source.
+
+`App\Domain\Pricing\Services\EntsoeClient` hand-parses the ENTSO-E
+Transparency Platform's XML response via regex (`Period`/`start`+
+`resolution`, `Point`/`position`+`price.amount`) rather than pulling in an
+XML parsing library — v2's own `src/lib/entsoe.ts` does the identical
+regex-based parse, and matching that exactly (including its resolution
+handling: `PT60M`→3600s, `PT30M`→1800s, `PT15M`→900s, unknown→3600s
+default) was judged more valuable than a "better" implementation that
+would parse differently at the margins. Error detection also matches
+exactly: non-2xx OR a body containing `Acknowledgement_MarketDocument`
+(ENTSO-E's own error-response envelope) OR zero parsed entries, each
+raising `App\Domain\Pricing\Exceptions\EntsoeFetchException` with the
+extracted `<text>` reason where available.
+
+`App\Domain\Pricing\Services\PriceEntryUpserter` ports
+`upsertPriceEntries()`'s chunked (2,000-row batches) Postgres
+`INSERT ... ON CONFLICT (bidding_zone, hour_start, source) DO UPDATE`
+via Laravel's `upsert()`, updating only `eur_per_mwh` — the original
+`created_at` is never touched by a re-ingest of the same hour, matching
+v2's identical column-list restriction.
+
+### ADR-60: `ingest-prices` and `generate-alerts` graduate from ADR-57's placeholder cards to fully wired jobs — the honest-subset gap closes on schedule
+
+ADR-57 (Stage 9) left two of the admin Jobs page's four job cards
+deliberately unwired, blocked on exactly the two dependencies this stage
+builds: the ENTSO-E price provider (ADR-59) and the `Alert` model
+(ADR-58). `App\Domain\Pricing\Actions\IngestPricesAction` ports
+`runIngestPricesJob()` exactly — a UTC-midnight-anchored 48-hour window
+("today + tomorrow"), wrapping any `EntsoeFetchException` in its own
+message and any other error in a generic "Unexpected ingestion error",
+matching v2's `err instanceof EntsoeFetchError ? err.message : "..."`
+branch precisely. `App\Domain\Alerts\Actions\GenerateAlertsAction` ports
+`generateAlertsJob()` exactly — iterates every `PILOT`/`ACTIVE`
+organization (cross-tenant, `OrganizationScope` bypassed throughout, same
+pattern as every other admin-context cross-tenant read since ADR-52), and
+per org: no metering point at all is skipped (an onboarding-stage gap
+already surfaced by the dashboard's own checklist, not duplicated here);
+otherwise flags `DATA_GAP` when the most recent `last_reading_at` across
+all the org's metering points is over 7 days old (`DATA_GAP_THRESHOLD_
+DAYS`, generous on purpose — Datahub auto-ingestion isn't wired up in v2
+either, manual upload is the only path today) or any metering point is
+`connection_healthy = false`, with v2's exact title/body branching
+between the two conditions. One subtle behavior preserved exactly:
+`alertsCreated`/`results[].alertCreated` reflect whether the *condition*
+was met, not whether `CreateAlertAction` actually inserted a row — v2's
+`createAlert()` returns `void`, so `generateAlertsJob()` can only ever
+know it *tried*, and this port's return type (a `bool` from
+`CreateAlertAction::execute()`, unlike v2) is deliberately ignored at this
+call site to keep that same observable behavior, covered by a dedicated
+test.
+
+Both jobs are now wired the same way `run-verification` already was:
+`App\Domain\Jobs\Actions\TriggerIngestPricesAction`/
+`TriggerGenerateAlertsAction` mirror `TriggerRunVerificationAction`
+exactly (swallow-and-log on failure, `admin.role:ADMIN` only), and
+`App\Http\Controllers\Admin\JobController`'s three known jobs are now all
+`triggerable: true`. `resources/js/Pages/Admin/Jobs.tsx`'s "Not wired up
+in this port yet." fallback text has no cards left to render for.
+
+### ADR-61: `BackfillPricesAction` ported exactly, with one deliberate portability adaptation — no raw `date_trunc(...)` SQL, since this app's test suite runs sqlite while production runs Postgres
+
+`App\Domain\Pricing\Actions\BackfillPricesAction` ports
+`backfillPrices()`'s full design: chunked (30-day default), idempotent
+(re-using `PriceEntryUpserter`'s upsert), skips a chunk already covered by
+≥20 rows/day for every day in its range (`MIN_ROWS_PER_COVERED_DAY`,
+resolution-agnostic — clears both hourly and 15-minute resolutions
+comfortably), retries a transient failure with `1000ms × 2^attempt`
+backoff up to 3 attempts by default, fails a chunk immediately (no retry)
+on a non-retryable config error (`EntsoeFetchException` whose message
+contains "not configured"), and never lets one bad chunk abort the run —
+failures are recorded per-range and returned.
+
+One implementation detail intentionally does **not** match v2 line-for-
+line: v2's `isChunkAlreadyCovered()` is a raw
+`SELECT date_trunc('day', "hourStart") ... GROUP BY ... HAVING count(*) >= ?`
+query, valid only against Postgres. This port's test suite runs against
+sqlite (`phpunit.xml`), which has no `date_trunc` function, and no other
+file in this codebase uses driver-specific raw SQL — every other query,
+including `PriceEntryUpserter`'s upsert, goes through Laravel's portable
+query builder. Rather than branching on `DB::connection()->getDriverName()`
+(a pattern with zero precedent here) or skipping this method's tests
+entirely, `isChunkAlreadyCovered()` was reimplemented as a plain Eloquent
+fetch-and-group-in-PHP: pull `hour_start` for the chunk's rows, group by
+calendar day (`Carbon::toDateString()`), count. Behaviorally identical —
+a chunk is at most 30 days, so pulling its timestamps into memory to group
+them is negligible — and portable across both connections without a
+driver check.
+
+The admin "Run backfill" form (`App\Domain\Jobs\Actions\
+TriggerBackfillPricesAction`, wired into `App\Http\Controllers\Admin\
+JobController::triggerBackfillPrices` + `App\Http\Requests\Admin\
+BackfillPricesRequest`) ports `triggerBackfillPrices()`'s Server Action
+exactly, including the one structural difference v2 itself has for this
+job: it does **not** go through `JobRunTracker` like the other three
+triggers — it creates the `JobRun` row up front and updates it live via
+`BackfillPricesAction`'s `onProgress` callback after every chunk, so
+refreshing `/admin/jobs` mid-run shows real progress on a `RUNNING` row,
+not just a final result. The 400-day cap
+(`BackfillPricesRequest::MAX_ADMIN_BACKFILL_DAYS`) matches v2's
+`MAX_ADMIN_BACKFILL_DAYS` exactly, with the same reasoning: an admin web
+request has an execution-time ceiling a multi-year backfill can exceed.
+`php artisan prices:backfill --start=... --end=...` (`App\Console\
+Commands\BackfillPricesCommand`) ports `scripts/backfill-prices.ts`
+exactly for that larger-range case, with no such ceiling — env vars became
+Artisan options (`--source`, `--chunk-days`) for a more idiomatic CLI, the
+only interface-level (not behavioral) change.
+
+### ADR-62: Laravel scheduler replaces Vercel Cron HTTP endpoints — no `CRON_SECRET`/`INTERNAL_JOB_SECRET` ported, because there is no HTTP surface left to protect
+
+v2 runs its three background jobs as Vercel Cron HTTP endpoints
+(`vercel.json`'s `crons` array calling `/api/internal/{ingest-prices,
+generate-alerts,run-verification}`), each gated by
+`verifyInternalJobRequest()`'s shared-secret check — necessary there
+because Vercel Cron calls the *deployed app* over the public internet, and
+without that check the endpoint would be an open door for anyone who
+found the URL. `routes/console.php` registers the direct Laravel
+equivalent instead: `Schedule::command('jobs:ingest-prices')->dailyAt
+('05:00')`, `Schedule::command('jobs:generate-alerts')->dailyAt('06:00')`,
+`Schedule::command('jobs:run-verification')->monthlyOn(1, '03:00')`, each
+`->timezone('UTC')` explicitly (matching `config('app.timezone')`, already
+`'UTC'`, but self-documenting against `vercel.json`'s cron expressions,
+which are UTC by Vercel Cron's own contract). All three times match
+`vercel.json` exactly (`0 5 * * *`, `0 6 * * *`, `0 3 1 * *`), confirmed
+via `php artisan schedule:list`.
+
+Laravel's scheduler has no HTTP surface at all: `schedule:run` executes
+`App\Console\Commands\{IngestPricesCommand,GenerateAlertsCommand,
+RunVerificationCommand}` in-process, on the same box running the app —
+there is nothing here for a shared secret to protect, and porting one over
+would just be unused config with no attacker it defends against. Each
+command is a thin wrapper: call the same job body the admin's manual
+"Run now" trigger calls, through the same `JobRunTracker`, with
+`triggered_by: 'cron'` — identical to v2's own route handlers, which call
+`withJobRunTracking(name, "cron", jobBody)`. Unlike v2's route handlers,
+which also call `Sentry.captureException()` on failure, these commands
+log via `Log::error()` only — this port has no Sentry integration wired
+up anywhere else either, so adding one here alone would be new
+infrastructure, not a port; `Log::error()` matches the logging-only half
+of v2's own error path (`console.error`) and the `JobRun.error_message`
+row is already the durable record either way.
+
+### ADR-63: Live smoke test confirmed the full background-jobs pipeline end-to-end — no regressions found, including the real ENTSO-E failure path
+
+Following this project's established practice (ADR-20/36/40/45/50/56):
+`migrate:fresh` against real Postgres, then a live browser session against
+`php artisan serve`, both realms.
+
+- **Admin** (`/admin/jobs`): all three job cards now show a working
+  "Run now" (ADR-60 closing ADR-57's gap). Clicked all three for real,
+  with no `ENTSO_E_TOKEN` configured in this local environment —
+  `ingest-prices` failed exactly as designed
+  (`ENTSO_E_TOKEN not configured`, recorded as a `FAILED` `JobRun`
+  row and shown in Recent runs), `generate-alerts` succeeded against zero
+  organizations. The backfill form (ADR-61) was submitted for a real
+  4-day range with the same missing token: the chunk failed but the
+  overall run still reports `succeeded` with `chunksFailed: 1` in its
+  summary and the flash message correctly renders "Done with 1 failed
+  chunk(s)…" — confirmed live, matching v2's behavior of never letting
+  one bad chunk fail the whole backfill.
+- **Portal** (`/dashboard`): seeded one real `Alert` row for a signed-in
+  member's organization — the "1 active alert" badge and the Alerts card
+  (severity dot, title, body, date) both rendered correctly (ADR-58).
+
+No bugs found this time — unlike ADR-56's Stage 9 smoke test, which
+caught two real Postgres-only issues, this stage's live run matched its
+sqlite-backed test suite's expectations exactly. Test data was cleared
+via a second `migrate:fresh` immediately after.
+
 ---
 
 # Post-Migration

@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Jobs\Actions\TriggerBackfillPricesAction;
+use App\Domain\Jobs\Actions\TriggerGenerateAlertsAction;
+use App\Domain\Jobs\Actions\TriggerIngestPricesAction;
 use App\Domain\Jobs\Actions\TriggerRunVerificationAction;
 use App\Domain\Jobs\Models\JobRun;
+use App\Domain\Pricing\Enums\PriceSource;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BackfillPricesRequest;
 use App\Models\AdminUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -13,15 +18,12 @@ use Inertia\Response;
 
 /**
  * Mirrors the Next.js app's src/app/admin/(protected)/jobs/
- * {page.tsx,actions.ts}'s three job cards, minus `ingest-prices` and
- * `generate-alerts` — both are real, implemented jobs in v2, but their
- * Laravel job bodies depend on work this port hasn't reached yet (the
- * ENTSO-E price provider, the Alert model — Stage 10/11). Only
- * `run-verification` gets a real "Run now" trigger here; the other two are
- * shown as known-but-unwired cards, MIGRATION_PLAN.md ADR-33's "honest
- * subset" pattern applied to this page. `backfill-prices` (a fourth,
- * real v2 job with its own live-progress form) is out of scope for the
- * same reason as `ingest-prices`.
+ * {page.tsx,actions.ts,BackfillPricesForm.tsx}. All three known jobs are
+ * wired to real "Run now" triggers, plus the fourth real v2 job,
+ * `backfill-prices`, with its own live-progress form (App\Domain\Jobs\
+ * Actions\TriggerBackfillPricesAction — unlike the other three, it
+ * bypasses App\Domain\Jobs\Services\JobRunTracker so its onProgress
+ * callback can update the JobRun row while the run is still in flight).
  *
  * The index has no role gate; triggering is `admin.role:ADMIN` only,
  * matching v2's `requireAdminRole(["ADMIN"])` on every trigger action.
@@ -50,7 +52,7 @@ class JobController extends Controller
 
                 return [
                     'job_name' => $jobName,
-                    'triggerable' => $jobName === 'run-verification',
+                    'triggerable' => true,
                     'last_run' => $lastRun ? $this->serializeRun($lastRun) : null,
                 ];
             }),
@@ -66,6 +68,50 @@ class JobController extends Controller
         $action->execute($admin);
 
         return back();
+    }
+
+    public function triggerIngestPrices(TriggerIngestPricesAction $action): RedirectResponse
+    {
+        /** @var AdminUser $admin */
+        $admin = Auth::guard('admin')->user();
+
+        $action->execute($admin);
+
+        return back();
+    }
+
+    public function triggerGenerateAlerts(TriggerGenerateAlertsAction $action): RedirectResponse
+    {
+        /** @var AdminUser $admin */
+        $admin = Auth::guard('admin')->user();
+
+        $action->execute($admin);
+
+        return back();
+    }
+
+    public function triggerBackfillPrices(BackfillPricesRequest $request, TriggerBackfillPricesAction $action): RedirectResponse
+    {
+        /** @var AdminUser $admin */
+        $admin = Auth::guard('admin')->user();
+
+        $outcome = $action->execute($admin, PriceSource::Entsoe, $request->startDate(), $request->endDate());
+
+        if ($outcome['status'] === 'error') {
+            return back()->with('backfill_result', [
+                'status' => 'error',
+                'message' => "Backfill failed: {$outcome['message']}",
+            ]);
+        }
+
+        $result = $outcome['result'];
+        $message = $result['chunksFailed'] > 0
+            ? "Done with {$result['chunksFailed']} failed chunk(s) — wrote ".number_format($result['rowsWritten']).
+                " rows, skipped {$result['chunksSkipped']} already-covered chunk(s). See job run detail for the failed ranges."
+            : 'Wrote '.number_format($result['rowsWritten'])." rows across {$result['chunksWritten']} chunk(s), ".
+                "skipped {$result['chunksSkipped']} already-covered chunk(s).";
+
+        return back()->with('backfill_result', ['status' => 'success', 'message' => $message]);
     }
 
     /**

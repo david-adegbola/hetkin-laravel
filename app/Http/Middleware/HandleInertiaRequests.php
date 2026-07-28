@@ -52,14 +52,19 @@ class HandleInertiaRequests extends Middleware
                 'isDashboardHost' => $request->getHost() === 'dashboard.'.config('app.domain'),
                 'isAdminHost' => $request->getHost() === 'admin.'.config('app.domain'),
             ],
-            // One-time flash data — currently only App\Http\Controllers\
+            // One-time flash data. `created_admin` is App\Http\Controllers\
             // Admin\TeamController::store()'s temp-password display, which
             // mirrors v2's CreateAdminUserForm.tsx showing the password
             // exactly once from the Server Action's direct return value.
-            // Laravel's session flash bag naturally ages this out after the
-            // one request that reads it, so no explicit clearing is needed.
+            // `backfill_result` is App\Http\Controllers\Admin\
+            // JobController::triggerBackfillPrices()'s success/error
+            // message, mirroring v2's BackfillPricesForm.tsx's
+            // useActionState result. Laravel's session flash bag naturally
+            // ages both out after the one request that reads them, so no
+            // explicit clearing is needed.
             'flash' => [
                 'created_admin' => $request->session()->get('created_admin'),
+                'backfill_result' => $request->session()->get('backfill_result'),
             ],
         ];
     }

@@ -128,6 +128,12 @@ return function (): void {
             Route::middleware('admin.role:ADMIN')->group(function () {
                 Route::post('jobs/run-verification', [JobController::class, 'triggerRunVerification'])
                     ->name('jobs.run-verification');
+                Route::post('jobs/ingest-prices', [JobController::class, 'triggerIngestPrices'])
+                    ->name('jobs.ingest-prices');
+                Route::post('jobs/generate-alerts', [JobController::class, 'triggerGenerateAlerts'])
+                    ->name('jobs.generate-alerts');
+                Route::post('jobs/backfill-prices', [JobController::class, 'triggerBackfillPrices'])
+                    ->name('jobs.backfill-prices');
             });
 
             // Static content — see resources/js/Pages/Admin/Docs.tsx's

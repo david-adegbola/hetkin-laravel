@@ -52,9 +52,12 @@ export type PageProps<
     organization?: PortalOrganization;
     /**
      * One-time flash data — see App\Http\Middleware\HandleInertiaRequests.
-     * Currently only the admin Team page's just-created temp password.
      */
     flash: {
         created_admin: { email: string; temp_password: string } | null;
+        backfill_result: {
+            status: 'success' | 'error';
+            message: string;
+        } | null;
     };
 };

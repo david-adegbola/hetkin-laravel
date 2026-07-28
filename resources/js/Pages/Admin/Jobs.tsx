@@ -1,11 +1,12 @@
 import { Badge } from '@/Components/ui/Badge';
 import { Button } from '@/Components/ui/Button';
 import { Card, CardTitle } from '@/Components/ui/Card';
+import { FieldError, Input, Label } from '@/Components/ui/Input';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
-import { router, usePage } from '@inertiajs/react';
-import { ReactElement, useState } from 'react';
+import { router, useForm, usePage } from '@inertiajs/react';
+import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface JobRun {
     id: string;
@@ -125,11 +126,84 @@ function JobCard({ job, base }: { job: KnownJob; base: string }) {
 }
 
 /**
- * Mirrors the Next.js app's src/app/admin/(protected)/jobs/page.tsx, minus
- * `ingest-prices`/`generate-alerts`'s "Run now" buttons and the
- * `backfill-prices` form — both real v2 jobs whose Laravel bodies aren't
- * built yet (Stage 10/11: ENTSO-E price provider, Alert model). Only
- * `run-verification` is triggerable, `admin.role:ADMIN` only.
+ * Ports the Next.js app's BackfillPricesForm.tsx exactly — fills
+ * ElectricityPrice for a past date range on demand, since ingest-prices
+ * only ever covers "today + tomorrow" going forward. Safe to re-run:
+ * already-covered days are skipped, and writes are idempotent. Capped at
+ * 400 days here (enforced server-side by App\Http\Requests\Admin\
+ * BackfillPricesRequest); a longer range needs `php artisan
+ * prices:backfill` run locally instead.
+ */
+function BackfillPricesForm({ base }: { base: string }) {
+    const { flash } = usePage<PageProps>().props;
+    const { data, setData, post, processing, errors } = useForm({
+        start_date: '',
+        end_date: '',
+    });
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+        post(`${base}/jobs/backfill-prices`, { preserveScroll: true });
+    };
+
+    return (
+        <Card className="mb-6">
+            <CardTitle className="mb-1">Backfill historical prices</CardTitle>
+            <p className="text-text-secondary mb-3 text-xs">
+                Fetches ENTSO-E day-ahead FI prices for a past date range. Safe
+                to re-run — already-covered days are skipped, and writes are
+                idempotent. Capped at 400 days here; for a longer range run{' '}
+                <code className="bg-background rounded px-1 py-0.5">
+                    php artisan prices:backfill
+                </code>{' '}
+                locally instead.
+            </p>
+            <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+                <div>
+                    <Label htmlFor="start_date">Start date</Label>
+                    <Input
+                        id="start_date"
+                        type="date"
+                        value={data.start_date}
+                        onChange={(e) => setData('start_date', e.target.value)}
+                        required
+                    />
+                    <FieldError>{errors.start_date}</FieldError>
+                </div>
+                <div>
+                    <Label htmlFor="end_date">End date (exclusive)</Label>
+                    <Input
+                        id="end_date"
+                        type="date"
+                        value={data.end_date}
+                        onChange={(e) => setData('end_date', e.target.value)}
+                        required
+                    />
+                    <FieldError>{errors.end_date}</FieldError>
+                </div>
+                <Button type="submit" size="sm" disabled={processing}>
+                    {processing ? 'Backfilling…' : 'Run backfill'}
+                </Button>
+            </form>
+            {flash.backfill_result && (
+                <p
+                    className={
+                        flash.backfill_result.status === 'success'
+                            ? 'bg-success-subtle text-success mt-3 rounded-lg px-4 py-3 text-sm font-medium'
+                            : 'bg-error-subtle text-error mt-3 rounded-lg px-4 py-3 text-sm font-medium'
+                    }
+                >
+                    {flash.backfill_result.message}
+                </p>
+            )}
+        </Card>
+    );
+}
+
+/**
+ * Mirrors the Next.js app's src/app/admin/(protected)/jobs/page.tsx. All
+ * three known jobs plus the backfill-prices form are wired to real
+ * triggers, `admin.role:ADMIN` only.
  */
 export default function Jobs({
     known_jobs,
@@ -165,6 +239,8 @@ export default function Jobs({
                     />
                 ))}
             </div>
+
+            {isAdmin && <BackfillPricesForm base={base} />}
 
             <Card>
                 <CardTitle className="mb-3">Recent runs</CardTitle>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Auth\Enums\AdminRole;
 use App\Domain\Billing\Enums\BaselineStatus;
 use App\Domain\Billing\Enums\InvoiceStatus;
@@ -13,6 +14,7 @@ use App\Domain\Organizations\Models\Member;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Models\OrganizationNote;
 use App\Domain\Organizations\Scopes\OrganizationScope;
+use App\Domain\Pricing\Actions\BackfillPricesAction;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\AdminUser;
 use Illuminate\Testing\TestResponse;
@@ -316,7 +318,7 @@ test('the audit log renders with an integrity banner, no role gate', function ()
 
 // --- Jobs -------------------------------------------------------------
 
-test('the jobs index shows the three known jobs with only run-verification triggerable', function () {
+test('the jobs index shows the three known jobs, all triggerable', function () {
     $admin = AdminUser::factory()->create();
     JobRun::factory()->succeeded()->create(['job_name' => 'run-verification']);
     $this->actingAs($admin, 'admin');
@@ -325,9 +327,12 @@ test('the jobs index shows the three known jobs with only run-verification trigg
 
     assertInertiaComponent($response, 'Admin/Jobs');
     expect(inertiaProp($response, 'known_jobs'))->toHaveCount(3);
+    expect(inertiaProp($response, 'known_jobs.0.job_name'))->toBe('ingest-prices');
+    expect(inertiaProp($response, 'known_jobs.0.triggerable'))->toBeTrue();
     expect(inertiaProp($response, 'known_jobs.1.job_name'))->toBe('run-verification');
     expect(inertiaProp($response, 'known_jobs.1.triggerable'))->toBeTrue();
-    expect(inertiaProp($response, 'known_jobs.0.triggerable'))->toBeFalse();
+    expect(inertiaProp($response, 'known_jobs.2.job_name'))->toBe('generate-alerts');
+    expect(inertiaProp($response, 'known_jobs.2.triggerable'))->toBeTrue();
 });
 
 test('triggering run-verification requires ADMIN', function () {
@@ -346,4 +351,89 @@ test('an ADMIN can trigger run-verification, creating a job run', function () {
         ->assertRedirect();
 
     expect(JobRun::query()->where('job_name', 'run-verification')->count())->toBe(1);
+});
+
+test('triggering ingest-prices requires ADMIN', function () {
+    $support = AdminUser::factory()->role(AdminRole::Support)->create();
+
+    $this->actingAs($support, 'admin')
+        ->post(route('admin.jobs.ingest-prices'))
+        ->assertForbidden();
+});
+
+test('an ADMIN can trigger ingest-prices, creating a job run', function () {
+    config(['services.entsoe.token' => null]);
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.ingest-prices'))
+        ->assertRedirect();
+
+    expect(JobRun::query()->where('job_name', 'ingest-prices')->count())->toBe(1);
+});
+
+test('triggering generate-alerts requires ADMIN', function () {
+    $support = AdminUser::factory()->role(AdminRole::Support)->create();
+
+    $this->actingAs($support, 'admin')
+        ->post(route('admin.jobs.generate-alerts'))
+        ->assertForbidden();
+});
+
+test('an ADMIN can trigger generate-alerts, creating a job run', function () {
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.generate-alerts'))
+        ->assertRedirect();
+
+    expect(JobRun::query()->where('job_name', 'generate-alerts')->count())->toBe(1);
+});
+
+test('triggering backfill-prices requires ADMIN', function () {
+    $support = AdminUser::factory()->role(AdminRole::Support)->create();
+
+    $this->actingAs($support, 'admin')
+        ->post(route('admin.jobs.backfill-prices'), ['start_date' => '2026-01-01', 'end_date' => '2026-01-02'])
+        ->assertForbidden();
+});
+
+test('backfill-prices rejects a missing date range', function () {
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.backfill-prices'), [])
+        ->assertSessionHasErrors(['start_date', 'end_date']);
+});
+
+test('backfill-prices rejects an end date that is not after the start date', function () {
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.backfill-prices'), ['start_date' => '2026-01-05', 'end_date' => '2026-01-01'])
+        ->assertSessionHasErrors('end_date');
+});
+
+test('backfill-prices rejects a range over the 400-day admin cap', function () {
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.backfill-prices'), ['start_date' => '2024-01-01', 'end_date' => '2026-01-01'])
+        ->assertSessionHasErrors('end_date');
+});
+
+test('an ADMIN can trigger backfill-prices, creating a job run and flashing a success message', function () {
+    $admin = AdminUser::factory()->role(AdminRole::Admin)->create();
+    $this->mock(BackfillPricesAction::class, function ($mock) {
+        $mock->shouldReceive('execute')->once()->andReturn([
+            'chunkCount' => 1, 'chunksWritten' => 1, 'chunksSkipped' => 0, 'chunksFailed' => 0, 'rowsWritten' => 24, 'failedRanges' => [],
+        ]);
+    });
+
+    $this->actingAs($admin, 'admin')
+        ->post(route('admin.jobs.backfill-prices'), ['start_date' => '2026-01-01', 'end_date' => '2026-01-02'])
+        ->assertRedirect()
+        ->assertSessionHas('backfill_result', fn ($result) => $result['status'] === 'success');
+
+    expect(JobRun::query()->where('job_name', 'backfill-prices')->count())->toBe(1);
 });
