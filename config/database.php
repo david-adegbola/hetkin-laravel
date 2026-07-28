@@ -97,6 +97,22 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Pins the Postgres session's own timezone to match
+            // config('app.timezone') (UTC) — without this, Laravel's
+            // PostgresConnector leaves the server's own configured
+            // timezone GUC in effect (e.g. the OS/server default, which
+            // may not be UTC), and any `timestamp` (not `timestamptz`)
+            // column written via a DB-side default like `useCurrent()`
+            // gets CURRENT_TIMESTAMP evaluated in THAT timezone — while
+            // every application-side `now()` write (Carbon, PHP) is UTC.
+            // Discovered via a live Stage 9 smoke test: App\Domain\Jobs\
+            // Models\JobRun's `started_at` (DB useCurrent()) and
+            // `completed_at` (PHP now(), set by App\Domain\Jobs\Services\
+            // JobRunTracker) landed 3 hours apart on a server whose
+            // timezone GUC was "Europe/Helsinki", producing a negative job
+            // duration on the admin Jobs page despite the run actually
+            // completing instantly.
+            'timezone' => 'UTC',
         ],
 
         'sqlsrv' => [

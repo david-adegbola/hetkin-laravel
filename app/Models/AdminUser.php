@@ -21,7 +21,7 @@ use Illuminate\Notifications\Notifiable;
  * Enforcing that a deactivated admin can't authenticate belongs to the
  * login flow (App\Http\Requests\Admin\Auth\LoginRequest), not this model.
  */
-#[Fillable(['name', 'email', 'password', 'role'])]
+#[Fillable(['name', 'email', 'password', 'role', 'active'])]
 #[Hidden(['password', 'remember_token'])]
 class AdminUser extends Authenticatable
 {

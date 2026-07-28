@@ -72,6 +72,33 @@ test('computes a verification record for an org with a locked baseline and enoug
     expect($record->review_status)->toBe(VerificationReviewStatus::ShadowPendingReview);
 });
 
+test('computes a verification record with no CurrentOrganization bound, matching the real cron/admin-trigger path', function () {
+    // Every other test in this file binds CurrentOrganization first, which
+    // silently masks a genuinely cross-tenant bug: this Action's real
+    // callers (a future scheduled command, and App\Domain\Jobs\Actions\
+    // TriggerRunVerificationAction's admin "Run now") never bind one. A
+    // live smoke test caught exactly this — a `whereHas('meteringPoint.
+    // site', ...)` constraint on the scoped Site model with no
+    // `withoutGlobalScope()` inside the closure, which throws
+    // App\Domain\Organizations\Scopes\OrganizationScope's fail-closed
+    // guard the moment no CurrentOrganization is bound.
+    $organization = Organization::factory()->create();
+    $baseline = Baseline::factory()->locked()->for($organization, 'organization')->create([
+        'baseline_annual_cost_cents' => 10_950_000,
+    ]);
+    $periodStart = Carbon::parse('2026-01-01', 'UTC');
+    $periodEnd = Carbon::parse('2026-02-01', 'UTC');
+    seedVerificationPeriodData($organization, $periodStart, 100, 50, days: 31);
+
+    $result = app(RunVerificationAction::class)->execute($periodStart, $periodEnd);
+
+    expect($result['results'][0]['status'])->toBe('computed');
+    $record = VerificationRecord::withoutGlobalScope(OrganizationScope::class)
+        ->where('organization_id', $organization->id)->first();
+    expect($record)->not->toBeNull();
+    expect($record->baseline_id)->toBe($baseline->id);
+});
+
 test('skips an org with a locked baseline but insufficient period data', function () {
     $organization = Organization::factory()->create();
     app(CurrentOrganization::class)->set($organization);

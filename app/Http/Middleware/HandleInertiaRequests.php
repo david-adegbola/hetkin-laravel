@@ -52,6 +52,15 @@ class HandleInertiaRequests extends Middleware
                 'isDashboardHost' => $request->getHost() === 'dashboard.'.config('app.domain'),
                 'isAdminHost' => $request->getHost() === 'admin.'.config('app.domain'),
             ],
+            // One-time flash data — currently only App\Http\Controllers\
+            // Admin\TeamController::store()'s temp-password display, which
+            // mirrors v2's CreateAdminUserForm.tsx showing the password
+            // exactly once from the Server Action's direct return value.
+            // Laravel's session flash bag naturally ages this out after the
+            // one request that reads it, so no explicit clearing is needed.
+            'flash' => [
+                'created_admin' => $request->session()->get('created_admin'),
+            ],
         ];
     }
 }

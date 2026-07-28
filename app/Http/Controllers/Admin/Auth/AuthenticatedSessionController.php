@@ -33,9 +33,12 @@ class AuthenticatedSessionController extends Controller
         // Host-aware since Stage 2 (MIGRATION_PLAN.md ADR-21): matches v2's
         // exact post-login destination (src/app/admin/sign-in/page.tsx
         // pushes to `${adminBasePath}/pilots`, computed from the current
-        // host at redirect time — same idea here).
-        // TODO(Stage 9 — Admin console): replace with the real admin
-        // overview redirect once it exists.
+        // host at redirect time — same idea here). Deliberately still
+        // /pilots even now that Stage 9's Overview page
+        // (App\Http\Controllers\Admin\DashboardController) exists — v2's
+        // own admin root page comment confirms this was an earlier
+        // deliberate change, not reverted: the Overview page is reachable
+        // from the nav, but isn't the sign-in destination.
         $target = $request->getHost() === 'admin.'.config('app.domain')
             ? route('admin.subdomain.pilots', absolute: false)
             : route('admin.pilots', absolute: false);

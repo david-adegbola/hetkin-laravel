@@ -98,7 +98,9 @@ class RunVerificationAction
                     ->first();
 
                 $readings = MeterReading::query()
-                    ->whereHas('meteringPoint.site', fn ($q) => $q->where('organization_id', $organization->id))
+                    ->whereHas('meteringPoint.site', fn ($q) => $q
+                        ->withoutGlobalScope(OrganizationScope::class)
+                        ->where('organization_id', $organization->id))
                     ->where('hour_start', '>=', $periodStart)
                     ->where('hour_start', '<', $periodEnd)
                     ->get();

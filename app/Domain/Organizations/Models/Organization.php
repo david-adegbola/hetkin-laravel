@@ -77,6 +77,14 @@ class Organization extends Model
     }
 
     /**
+     * @return HasMany<OrganizationNote, $this>
+     */
+    public function notes(): HasMany
+    {
+        return $this->hasMany(OrganizationNote::class);
+    }
+
+    /**
      * @return BelongsTo<PilotApplication, $this>
      */
     public function pilotApplication(): BelongsTo

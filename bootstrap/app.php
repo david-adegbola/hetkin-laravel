@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminActive;
 use App\Http\Middleware\EnsureAdminRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveOrganizationContext;
@@ -46,6 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'organization.context' => ResolveOrganizationContext::class,
             'admin.role' => EnsureAdminRole::class,
+            'admin.active' => EnsureAdminActive::class,
         ]);
 
         // Two isolated auth realms (MIGRATION_PLAN.md ADR-4): an

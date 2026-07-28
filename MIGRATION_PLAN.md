@@ -1243,3 +1243,209 @@ account, and landed on that organization's portal dashboard as its
 `Invitation.status = accepted`, and all three expected audit-log entries
 (`pilot_application.submitted` → `pilot_application.approved` →
 `invitation.accepted`) present in the hash chain.
+
+## Stage 9: Admin Console
+
+### ADR-51: RLS-scoping determination for `OrganizationNote` and `JobRun`
+
+Confirmed against v2's own RLS policy list (the established, mandatory
+method for this determination — never guessed) and its Prisma schema:
+
+- **`OrganizationNote`** has a direct `organizationId` and is in the RLS
+  list, so it gets `BelongsToOrganization` like any other tenant-owned
+  row — plus a `authorAdminUserId` belongsTo, the one model in this port
+  referencing both a tenant and an internal `AdminUser`.
+- **`JobRun`** is NOT org-scoped at all — a job run is a system-wide
+  event, not owned by any one tenant. `triggered_by` is a plain
+  unconstrained string column (holds either the literal `"cron"` or an
+  `AdminUser` id, unprefixed — confirmed against v2's own
+  `triggeredBy: string // "cron" or an AdminUser id` schema comment and
+  its actual write sites), the same "no `@relation` in the Prisma source,
+  so none added here either" reasoning as `invitations.invited_by_user_id`
+  (ADR-47).
+
+### ADR-52: Admin-context cross-tenant reads — every admin controller explicitly bypasses `OrganizationScope`, never binds `CurrentOrganization`
+
+The admin realm has no "current organization" concept — an admin's own
+session isn't tied to any one tenant, unlike the portal realm's
+`ResolveOrganizationContext` middleware (ADR-31). Every admin controller
+built this stage (`OrganizationController`, `BaselineController`,
+`VerificationController`, `InvoiceController`, `DashboardController`)
+reads `Baseline`/`VerificationRecord`/`Invoice`/`Member`/`Invitation`/
+`OrganizationNote` — all `BelongsToOrganization`-scoped — via explicit
+`Model::withoutGlobalScope(OrganizationScope::class)` calls, matching the
+pattern Stage 7's `LockBaselineAction`/`RunVerificationAction` already
+established for the same reason (a genuinely cross-tenant read, not a
+single-tenant one with no context bound yet).
+
+This applies recursively to **eager-loaded relations that themselves
+point at a scoped model** — not just top-level queries. Two real gotchas
+this surfaced, both fixed during Stage 9 build-out (not left as latent
+bugs):
+- `Invoice::with('verificationRecord')` — `VerificationRecord` is scoped,
+  so the eager-load closure needs its own
+  `fn ($q) => $q->withoutGlobalScope(OrganizationScope::class)`, or the
+  *relation* query throws even though the top-level `Invoice` query
+  already opted out.
+- Bulk `withCount`/relation-based aggregates (e.g. "member count per org"
+  on the Organizations index) can't use Eloquent's `withCount('members')`
+  at all in admin context — the count subquery still runs through
+  `Member`'s own global scope. Replaced with an explicit grouped bulk
+  query (`Member::withoutGlobalScope(...)->selectRaw('organization_id,
+  count(*) as aggregate')->groupBy('organization_id')`), same shape as
+  `PilotApplicationController`'s pre-existing pending-invitations
+  grouping (Stage 8).
+
+### ADR-53: Member/Invitation sub-resources resolved manually, not via implicit route-model binding — a deliberate IDOR guard, not just a scope workaround
+
+`routes/admin-protected.php`'s organization-detail mutation routes
+(`organizations/{organization}/members/{member}/role`, `.../invitations/
+{invitation}/resend`, etc.) take `{member}`/`{invitation}` as **plain
+string route parameters**, not type-hinted Eloquent models. Laravel's
+implicit route-model binding resolves every bindable parameter on a route
+in one pass (via `SubstituteBindings` middleware) before any custom
+middleware between them can run — there's no way to bind `{organization}`
+first, then have a middleware set `CurrentOrganization`, then have
+`{member}` resolve correctly scoped to it, all within one request. So
+`OrganizationController` resolves them itself:
+`Member::withoutGlobalScope(OrganizationScope::class)->where
+('organization_id', $organization->id)->findOrFail($member)`.
+
+This is not just a mechanical workaround — it's a real IDOR guard, and a
+better one than implicit binding would have given: a `{member}` id that
+belongs to a *different* organization than the route's `{organization}`
+now 404s, rather than either resolving successfully across tenants (via
+`Member::withoutGlobalScope` alone) or throwing an opaque "not authorized"
+error. Covered by a dedicated test (`AdminConsoleControllersTest.php`,
+"a member id from a different org 404s on the org-scoped member route").
+
+### ADR-54: `EnsureAdminActive` middleware — the "already-authenticated" half of the deactivation rule Stage 1's `LoginRequest` anticipated
+
+v2 enforces `AdminUser.active` in two independent, redundant places on
+every request: `(protected)/layout.tsx` (page-level, re-checks on every
+navigation) and `requireAdminSession()` (Server-Action-level, re-checks
+on every mutation) — both needed because Better Auth's session
+`cookieCache` can serve a stale `active: true` for up to 30 seconds
+without hitting the database. Laravel's session guard has no equivalent
+cache — `Auth::user()` resolves the `AdminUser` row fresh from the
+database on every request already — so one middleware
+(`App\Http\Middleware\EnsureAdminActive`, aliased `admin.active`, applied
+to every route in `routes/admin-protected.php` except `logout`) gives the
+same request-level guarantee v2 gets from its two call sites, without
+needing to duplicate the check. A deactivated admin is logged out
+outright (session invalidated) rather than merely blocked — an
+invalidated session is a more honest state than a technically-still-
+authenticated one every route silently rejects.
+
+### ADR-55: Admin Overview's `/overview` path, not bare `/` — a real route collision, not a stylistic choice
+
+v2's admin root (`src/app/admin/(protected)/page.tsx`) *is* reachable at
+bare `/admin` on the main domain — but on the `admin.*` subdomain, v2's
+own proxy layer (`src/proxy.ts`) unconditionally rewrites bare `/` to
+`/admin/sign-in`, regardless of auth state (confirmed by
+`SubdomainRoutingTest.php`'s pre-existing, passing test: an
+*unauthenticated* request to `admin.localhost/` renders the sign-in
+page — that test predates this stage and was not changed). Registering
+the new Overview route at bare `/` in the shared `routes/admin-protected.
+php` closure would have silently replaced `routes/domains.php`'s existing
+`admin.subdomain.home` entry in Laravel's route collection (same
+method+URI+domain key) — caught by that same pre-existing test failing
+(guest hitting `admin.localhost/` got redirected into the newly-registered
+authenticated route instead of seeing sign-in). Fixed by giving Overview
+its own path segment (`overview`) on both mount points, consistent with
+every other admin page, rather than bare `/` on either — a deliberate,
+minor divergence from v2's own literal href (whose bare-`/` link on the
+subdomain is itself a latent dead-link into the same proxy rewrite,
+per v2's own architecture, not a behavior worth reproducing exactly).
+
+### ADR-56: Two real, Postgres-only bugs found via a live smoke test — neither reproducible against the sqlite test suite
+
+Following this project's established practice (ADR-20/36/40/45/50), the
+full admin console was walked in a real browser against this port's
+actual Postgres database (not sqlite) — sign in, every nav destination,
+org-detail mutations (status/pricing/note/member-role/GDPR-erasure),
+invoice lifecycle (mark paid), admin creation (temp-password flash), and
+a manual job trigger. This surfaced two genuine bugs that the full
+396-test Pest suite (run against sqlite per `phpunit.xml`) could not have
+caught, in either case because sqlite lacks the specific Postgres
+behavior the bug depended on:
+
+1. **`audit_log_entries.metadata` was `jsonb`, not `json`.** Postgres's
+   `jsonb` type decomposes a JSON value into a binary form and
+   reconstitutes it on read — canonicalizing whitespace *and reordering
+   object keys*. `AuditLogService::computeHash()` re-serializes
+   `metadata` via `json_encode()` using the original key order every
+   time; at write time that matches what's about to be stored, but at
+   verify time (`AuditChainIntegrityChecker::verify()`, reading metadata
+   back out of the now-reordered `jsonb` column) it no longer does — so
+   every audit entry with non-empty metadata failed integrity
+   verification despite nothing being tampered with. sqlite has no native
+   `jsonb` type, so `jsonb()` migrations there just produce a plain TEXT
+   column that round-trips bytes exactly, masking the bug completely
+   under the full test suite. Fixed via a follow-up migration narrowing
+   the column to plain `json` (which stores input text verbatim) — same
+   "the stored representation must byte-for-byte match what produced the
+   hash" reasoning the creating migration already documents for
+   `created_at`'s microsecond precision, just for a different column.
+   Already-written rows before the fix remain permanently unverifiable
+   (the migration changes the type going forward, it can't retroactively
+   recover a jsonb-reordered value's original byte form) — a genuinely
+   destructive discovery, not a latent risk, which is exactly why a live
+   smoke test against the real database engine matters here.
+
+2. **Postgres session timezone wasn't pinned to UTC.** `config('app.
+   timezone')` is `UTC`, but nothing told the `pgsql` connection to match
+   — so `JobRun.started_at`'s DB-side `useCurrent()` default was
+   evaluated in the Postgres server's own configured timezone (observed:
+   `Europe/Helsinki`, UTC+3 in summer) while `completed_at` (set via PHP
+   `now()` in `JobRunTracker`) was genuinely UTC, producing a negative
+   job duration on the admin Jobs page (a run that took milliseconds
+   displayed as `-10800000ms`). Fixed with `'timezone' => 'UTC'` on the
+   `pgsql` connection in `config/database.php` (Laravel's
+   `PostgresConnector` runs `SET TIME ZONE` with this value on connect),
+   collapsing the skew from 3 hours to sub-second ordinary clock drift
+   between the DB and app processes — then eliminated entirely by having
+   `JobRunTracker` set `started_at` explicitly via PHP `now()` instead of
+   relying on the DB default, so both timestamps on a `JobRun` row always
+   come from the same clock. `RunVerificationAction` also had a real,
+   independent bug the same smoke test caught: `MeterReading::query()
+   ->whereHas('meteringPoint.site', fn ($q) => $q->where(...))` never
+   bypassed `Site`'s own `OrganizationScope` inside the `whereHas`
+   closure — invisible under the existing Pest suite because every
+   existing test for this Action binds `CurrentOrganization` first
+   (masking exactly the cross-tenant, no-context-bound path this Action's
+   real callers — a future cron command, and this stage's own admin
+   "Run now" trigger — actually use). Fixed, and closed for good with a
+   new regression test that calls the Action with no `CurrentOrganization`
+   bound at all, verified to fail against the pre-fix code before
+   confirming it passes against the fix.
+
+Both fixes are narrow and additive — no behavior questions, just
+infrastructure the app's actual guarantees (a verifiable hash chain, a
+non-negative job duration, a working cross-tenant admin trigger) depend
+on being correct.
+
+### ADR-57: `ingest-prices`/`generate-alerts`/`backfill-prices` deliberately unwired — real v2 jobs, not placeholders, blocked on Stage 10/11 dependencies
+
+v2's admin Jobs page has three "Run now"-triggerable job cards plus a
+separate backfill form — all four are fully implemented in v2 (not
+placeholder UI), confirmed via direct source inspection: `runIngestPrices
+Job()` calls a real ENTSO-E price-provider integration, `generateAlerts
+Job()` creates real `Alert` rows after checking metering-point health.
+Neither dependency (`Alert` model, ENTSO-E integration) has been built in
+this port yet — both are explicitly out of scope until Stage 10/11. This
+port's `App\Http\Controllers\Admin\JobController` and `App\Domain\Jobs\
+Actions\TriggerRunVerificationAction` wire up only `run-verification`
+(whose full dependency chain — `RunVerificationAction`,
+`VerificationCalculationService` — has existed since Stage 7); the other
+two job cards render with their description text but no working button
+(`Not wired up in this port yet.`), and the backfill form doesn't exist
+at all. Same "honest subset" pattern as every prior stage (ADR-33 and
+its many descendants) — a nav link or button pointing at nothing would be
+worse than the gap being visibly absent. `resources/js/Pages/Admin/
+Docs.tsx` — the one page in this stage that's pure static content, ported
+content-for-content from v2's real staff guide rather than stubbed, since
+unlike the job cards the *content itself* has no unbuilt dependency — was
+adjusted in one place to describe this honestly (v2's own copy claims
+"three background jobs run on a schedule and can also be triggered
+manually," which would be misleading here).

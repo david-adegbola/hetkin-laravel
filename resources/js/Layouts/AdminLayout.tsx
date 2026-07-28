@@ -13,36 +13,56 @@ const ADMIN_ROLE_LABELS: Record<string, string> = {
 };
 
 /**
- * Internal admin shell — mirrors the Next.js app's src/app/admin/
- * (protected)/layout.tsx in spirit, not in full: that layout's top nav
- * lists ten destinations (Overview, Pilots, Organizations, Baselines,
- * Verification, Invoices, Jobs, Audit Log, Team, Docs); only "Pilots" has
- * a real page behind it so far (Stage 8) — the rest is the unified admin
- * console, Stage 9. Same "honest subset" reasoning as
- * resources/js/Layouts/PortalLayout.tsx (MIGRATION_PLAN.md ADR-33),
- * applied to the admin realm for the first time — a nav link to a 404
- * would be worse than v2's actual behavior, not equivalent to it. Extend
- * this nav list the same way PortalLayout's was extended, as Stage 9
- * builds each real page.
+ * Mirrors the Next.js app's src/app/admin/(protected)/layout.tsx's top nav
+ * — the full ten-destination list now that Stage 9 has built a real page
+ * behind every one of them. `Docs` is the one exception: the Explore
+ * agent's own Stage 9 research flagged it as low-priority static content,
+ * so it's a single simple page (resources/js/Pages/Admin/Docs.tsx), not a
+ * data-backed console screen.
  */
+const NAV_ITEMS: Array<{ href: string; label: string }> = [
+    { href: '/overview', label: 'Overview' },
+    { href: '/pilots', label: 'Pilots' },
+    { href: '/organizations', label: 'Organizations' },
+    { href: '/baselines', label: 'Baselines' },
+    { href: '/verification', label: 'Verification' },
+    { href: '/invoices', label: 'Invoices' },
+    { href: '/jobs', label: 'Jobs' },
+    { href: '/audit-log', label: 'Audit Log' },
+    { href: '/team', label: 'Team' },
+    { href: '/docs', label: 'Docs' },
+];
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
-    const { auth } = usePage<PageProps>().props;
+    const { auth, url } = usePage<PageProps & { url?: string }>().props;
     const admin = auth.admin;
     const base = useAdminBasePath();
+    const currentPath =
+        typeof window !== 'undefined' ? window.location.pathname : (url ?? '');
 
     return (
         <div className="bg-background min-h-screen">
             <nav className="border-border bg-background flex flex-wrap items-center gap-4 border-b px-8 py-3">
-                <Link href={base || '/'} className="flex items-center">
+                <Link href={`${base}/overview`} className="flex items-center">
                     <Logo />
                 </Link>
                 <div className="flex flex-1 flex-wrap gap-1">
-                    <Link
-                        href={`${base}/pilots`}
-                        className="rounded-control bg-accent-subtle text-accent px-3 py-2 text-sm font-medium"
-                    >
-                        Pilots
-                    </Link>
+                    {NAV_ITEMS.map((item) => {
+                        const active = currentPath.endsWith(item.href);
+                        return (
+                            <Link
+                                key={item.href}
+                                href={`${base}${item.href}`}
+                                className={
+                                    active
+                                        ? 'rounded-control bg-accent-subtle text-accent px-3 py-2 text-sm font-medium'
+                                        : 'rounded-control text-text-secondary hover:bg-surface hover:text-primary px-3 py-2 text-sm font-medium'
+                                }
+                            >
+                                {item.label}
+                            </Link>
+                        );
+                    })}
                 </div>
                 {admin && (
                     <div className="text-text-secondary flex items-center gap-3 text-xs">
