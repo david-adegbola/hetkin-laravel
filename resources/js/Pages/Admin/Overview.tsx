@@ -28,6 +28,7 @@ interface OverviewProps {
     };
     audit_chain: AuditChain;
     active_admin_count: number;
+    unread_alert_count: number;
     needs_attention: boolean;
 }
 
@@ -82,10 +83,8 @@ function HealthCard({
 
 /**
  * Mirrors the Next.js app's admin root, src/app/admin/(protected)/
- * page.tsx (`AdminOverviewPage`). Skips v2's unread-Alert count (the Alert
- * model doesn't exist in this port yet — Stage 10), same reasoning as
- * App\Http\Controllers\Admin\JobController leaving `generate-alerts`
- * unwired. Every other section is ported in full.
+ * page.tsx (`AdminOverviewPage`) in full, including the unread-Alert count
+ * (Stage 10).
  */
 export default function Overview({
     organizations,
@@ -97,6 +96,7 @@ export default function Overview({
     jobs,
     audit_chain,
     active_admin_count,
+    unread_alert_count,
     needs_attention,
 }: OverviewProps) {
     const base = useAdminBasePath();
@@ -187,9 +187,10 @@ export default function Overview({
                     href={`${base}/baselines`}
                 />
                 <HealthCard
-                    label="Active admins"
-                    value={active_admin_count}
-                    href={`${base}/team`}
+                    label="Unread alerts"
+                    value={unread_alert_count}
+                    tone={unread_alert_count > 0 ? 'expensive' : 'cheap'}
+                    href={`${base}/organizations`}
                 />
             </div>
 

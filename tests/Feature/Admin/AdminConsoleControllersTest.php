@@ -53,7 +53,8 @@ function inertiaProp(TestResponse $response, string $path): mixed
 
 test('the overview page renders a system-health snapshot', function () {
     $admin = AdminUser::factory()->create();
-    Organization::factory()->count(2)->create();
+    $organization = Organization::factory()->create();
+    Alert::factory()->for($organization, 'organization')->create();
     $this->actingAs($admin, 'admin');
 
     $response = inertiaGet(route('admin.overview'));
@@ -62,6 +63,7 @@ test('the overview page renders a system-health snapshot', function () {
     expect(inertiaProp($response, 'organizations'))->not->toBeNull();
     expect(inertiaProp($response, 'audit_chain.valid'))->toBeTrue();
     expect(inertiaProp($response, 'active_admin_count'))->toBe(1);
+    expect(inertiaProp($response, 'unread_alert_count'))->toBe(1);
 });
 
 // --- Organizations -------------------------------------------------------------
@@ -87,6 +89,7 @@ test('the organization detail page renders members, invitations, notes, and fina
     Baseline::factory()->for($organization, 'organization')->create();
     VerificationRecord::factory()->for($organization, 'organization')->create();
     Invoice::factory()->for($organization, 'organization')->create();
+    Alert::factory()->for($organization, 'organization')->create();
     $this->actingAs($admin, 'admin');
 
     $response = inertiaGet(route('admin.organizations.show', $organization));
@@ -98,6 +101,7 @@ test('the organization detail page renders members, invitations, notes, and fina
     expect(inertiaProp($response, 'baselines'))->toHaveCount(1);
     expect(inertiaProp($response, 'verification_records'))->toHaveCount(1);
     expect(inertiaProp($response, 'invoices'))->toHaveCount(1);
+    expect(inertiaProp($response, 'alerts'))->toHaveCount(1);
 });
 
 test('updating organization status requires ADMIN', function () {

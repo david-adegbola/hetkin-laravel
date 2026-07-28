@@ -2,6 +2,9 @@
 
 namespace App\Domain\Billing\Actions;
 
+use App\Domain\Alerts\Actions\CreateAlertAction;
+use App\Domain\Alerts\Enums\AlertSeverity;
+use App\Domain\Alerts\Enums\AlertType;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -15,6 +18,7 @@ use App\Domain\Billing\Exceptions\BillingActionException;
 use App\Domain\Billing\Exceptions\InsufficientDataException;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\SavingsAssessment;
+use App\Domain\Billing\Reports\Money;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
@@ -31,14 +35,18 @@ use Illuminate\Support\Facades\DB;
  * oversight; see MIGRATION_PLAN.md's Stage 7 ADR for why it's ported
  * as-is rather than "fixed" to auto-supersede.
  *
- * Deliberately omits, matching v2 features this port hasn't built yet:
- *   - createAlert()'s REPORT_READY alert — the Alert domain doesn't exist
- *     yet (Stage 10; see MIGRATION_PLAN.md ADR-33).
+ * Deliberately still omits, matching v2 features this port hasn't built
+ * yet:
  *   - PostHog `savings_assessment_generated` event (Stage 11).
  *   - Onboarding-status cache invalidation — same reasoning as
  *     UploadMeterReadingsAction/AddScheduleBlockAction.
  * Neither is silently dropped; both are noted here so a future stage
  * knows exactly what to add back once their domains exist.
+ *
+ * The REPORT_READY alert (Stage 10) fires AFTER the domain transaction
+ * commits, unconditionally (no threshold — every successful generation
+ * gets one), using the plain `CreateAlertAction`, matching v2's
+ * `createAlert()` call with `scopedDb` rather than the transaction's `tx`.
  */
 class GenerateSavingsAssessmentAction
 {
@@ -46,6 +54,7 @@ class GenerateSavingsAssessmentAction
         private readonly SavingsCalculationService $service,
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
+        private readonly CreateAlertAction $createAlertAction,
     ) {}
 
     /**
@@ -101,7 +110,7 @@ class GenerateSavingsAssessmentAction
             $hetkinShareCents = (int) round($result->estimatedAnnualSavingsCents * $revenueShareFraction);
             $netCustomerSavingsCents = $result->estimatedAnnualSavingsCents - $hetkinShareCents;
 
-            return DB::transaction(function () use (
+            $assessment = DB::transaction(function () use (
                 $organization, $user, $result, $hetkinShareCents,
                 $netCustomerSavingsCents, $firstHour, $lastHour,
             ) {
@@ -145,6 +154,16 @@ class GenerateSavingsAssessmentAction
 
                 return $assessment->refresh();
             });
+
+            $this->createAlertAction->execute(
+                $organization->id,
+                AlertType::ReportReady,
+                AlertSeverity::Info,
+                'Your savings assessment is ready',
+                'Estimated annual savings: '.Money::formatEurCents($result->estimatedAnnualSavingsCents).'. Download the PDF or review the full breakdown on the Reports page.',
+            );
+
+            return $assessment;
         } finally {
             $this->currentOrganization->set($previousOrganization);
         }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Services\AuditChainIntegrityChecker;
 use App\Domain\Billing\Enums\VerificationReviewStatus;
 use App\Domain\Billing\Models\Baseline;
@@ -22,13 +23,10 @@ use Inertia\Response;
 /**
  * Mirrors the Next.js app's admin root, src/app/admin/(protected)/page.tsx
  * (`AdminOverviewPage`) — a read-only system-health snapshot, no role gate.
- *
- * Skips v2's unread-Alert count: the Alert model doesn't exist in this
- * port yet (Stage 10), same reason App\Http\Controllers\Admin\JobController
- * leaves `generate-alerts` unwired. Every other section — org/baseline/
- * verification/invoice breakdowns, price freshness, job health, audit
- * chain integrity, active admin count — has everything it needs already
- * built and is ported in full.
+ * Every section is now ported in full, including the unread-Alert count
+ * (Stage 10) — global across every organization, matching v2's
+ * `db.alert.count({ where: { readAt: null } })` exactly (not org-scoped,
+ * unlike the portal dashboard's own count).
  */
 class DashboardController extends Controller
 {
@@ -78,6 +76,10 @@ class DashboardController extends Controller
 
         $activeAdminCount = AdminUser::query()->where('active', true)->count();
 
+        $unreadAlertCount = Alert::withoutGlobalScope(OrganizationScope::class)
+            ->whereNull('read_at')
+            ->count();
+
         $priceStale = $priceHoursStale === null || $priceHoursStale > self::PRICE_STALE_HOURS;
         $verificationPending = (int) ($verificationByStatus['SHADOW_PENDING_REVIEW'] ?? 0);
 
@@ -113,6 +115,7 @@ class DashboardController extends Controller
             ],
             'audit_chain' => $integrity,
             'active_admin_count' => $activeAdminCount,
+            'unread_alert_count' => $unreadAlertCount,
             'needs_attention' => $priceStale || $anyJobFailed || ! $integrity['valid'] || $verificationPending > 0,
         ]);
     }

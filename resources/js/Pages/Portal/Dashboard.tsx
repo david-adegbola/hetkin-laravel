@@ -25,20 +25,42 @@ interface RecommendationRow {
     decision: RecommendationDecision | null;
 }
 
+interface AlertRow {
+    id: string;
+    type: string;
+    severity: string;
+    title: string;
+    body: string;
+    created_at: string;
+}
+
+function severityDotClass(severity: string): string {
+    if (severity === 'WARNING') return 'bg-error';
+    if (severity === 'OPPORTUNITY') return 'bg-success';
+
+    return 'bg-primary';
+}
+
 /**
  * Portal overview — see App\Http\Controllers\Portal\DashboardController's
  * docblock for why this is an honest interim page rather than an
  * approximation of v2's full stat-card dashboard (src/app/(portal)/
- * dashboard/page.tsx): that page's numbers come from domains (Verification,
- * Alerts) that don't exist in this port yet. Links to what Stage 5 actually
- * built (Schedule, Data) instead of showing zeros that would look identical
- * whether nothing happened yet or something is broken. "Recent
- * recommendations" IS real as of Stage 6 and is ported here in full.
+ * dashboard/page.tsx): the OTHER three stat cards (verified savings
+ * MTD/YTD, adoption rate) come from a VerificationRecord aggregate view
+ * this port hasn't built yet — a distinct gap from Alerts, not part of
+ * Stage 10. Links to what Stage 5 actually built (Schedule, Data) instead
+ * of showing zeros that would look identical whether nothing happened yet
+ * or something is broken. "Recent recommendations" (Stage 6) and "Active
+ * alerts"/"Alerts" (Stage 10) ARE real and ported here in full.
  */
 export default function Dashboard({
     recentRecommendations,
+    activeAlertCount,
+    recentAlerts,
 }: {
     recentRecommendations: RecommendationRow[];
+    activeAlertCount: number;
+    recentAlerts: AlertRow[];
 }) {
     const { organization } = usePage<PageProps>().props;
     const base = usePortalBasePath();
@@ -60,10 +82,9 @@ export default function Dashboard({
                 <p className="text-text-secondary mb-4 text-sm">
                     Upload your electricity consumption data and add your
                     production schedule to start building toward a savings
-                    assessment. Verified savings and alerts will appear here
-                    once that's in place.
+                    assessment.
                 </p>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <Link
                         href={`${base}/data`}
                         className="text-accent hover:text-accent-hover text-sm font-medium"
@@ -76,7 +97,51 @@ export default function Dashboard({
                     >
                         Add schedule →
                     </Link>
+                    {activeAlertCount > 0 && (
+                        <Badge variant="expensive" showGlyph={false}>
+                            {activeAlertCount} active alert
+                            {activeAlertCount === 1 ? '' : 's'}
+                        </Badge>
+                    )}
                 </div>
+            </Card>
+
+            <Card className="mb-4">
+                <h3 className="font-display text-primary mb-4 text-base font-semibold">
+                    Alerts
+                </h3>
+                {recentAlerts.length === 0 ? (
+                    <p className="text-text-secondary py-6 text-center text-sm">
+                        No alerts.
+                    </p>
+                ) : (
+                    <div>
+                        {recentAlerts.map((alert) => (
+                            <div
+                                key={alert.id}
+                                className="border-border flex items-start gap-3 border-b py-3 last:border-0"
+                            >
+                                <span
+                                    className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${severityDotClass(alert.severity)}`}
+                                    aria-hidden="true"
+                                />
+                                <div className="flex-1">
+                                    <div className="text-primary text-sm font-semibold">
+                                        {alert.title}
+                                    </div>
+                                    <p className="text-text-secondary mt-0.5 text-sm">
+                                        {alert.body}
+                                    </p>
+                                    <div className="text-text-secondary mt-1 text-xs">
+                                        {new Date(
+                                            alert.created_at,
+                                        ).toLocaleDateString('en-GB')}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </Card>
 
             <Card>

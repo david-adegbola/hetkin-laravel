@@ -2,9 +2,13 @@
 
 namespace App\Domain\Optimization\Actions;
 
+use App\Domain\Alerts\Actions\CreateAlertAction;
+use App\Domain\Alerts\Enums\AlertSeverity;
+use App\Domain\Alerts\Enums\AlertType;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
+use App\Domain\Billing\Reports\Money;
 use App\Domain\Optimization\Contracts\RecommendationEngine;
 use App\Domain\Optimization\DTOs\PricePoint as EnginePricePoint;
 use App\Domain\Optimization\DTOs\RecommendationEngineInput;
@@ -25,13 +29,18 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Ports the Next.js app's runOptimization() Server Action exactly
- * (src/app/(portal)/dashboard/schedule/actions.ts). Deliberately omits:
- *   - createAlert()'s NEW_OPPORTUNITY alert — the Alert domain doesn't
- *     exist yet (Stage 10); see MIGRATION_PLAN.md ADR-33.
- *   - onboarding-status cache invalidation — same reasoning as
- *     UploadMeterReadingsAction/AddScheduleBlockAction.
- * Neither is silently dropped; both are noted here so a future stage
- * knows exactly what to add back once their domains exist.
+ * (src/app/(portal)/dashboard/schedule/actions.ts). Deliberately still
+ * omits onboarding-status cache invalidation — same reasoning as
+ * UploadMeterReadingsAction/AddScheduleBlockAction (not silently dropped,
+ * noted here so a future stage knows what to add back).
+ *
+ * The NEW_OPPORTUNITY alert (Stage 10) fires AFTER the domain transaction
+ * commits, using the plain `CreateAlertAction`, not inside the
+ * transaction — matches v2 exactly (`createAlert()` there is called with
+ * `scopedDb`, not the transaction's `tx`, at every one of its four call
+ * sites). Every recommendation the engine returns has already cleared its
+ * own minimum-savings floor, so a non-empty list is already a real
+ * opportunity — no extra re-thresholding here, matching v2's own comment.
  */
 class RunOptimizationAction
 {
@@ -39,6 +48,7 @@ class RunOptimizationAction
         private readonly RecommendationEngine $engine,
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
+        private readonly CreateAlertAction $createAlertAction,
     ) {}
 
     /**
@@ -102,7 +112,7 @@ class RunOptimizationAction
                 ))->all(),
             ));
 
-            return DB::transaction(function () use ($organization, $user, $schedule, $result) {
+            $run = DB::transaction(function () use ($organization, $user, $schedule, $result) {
                 $run = OptimizationRun::create([
                     'organization_id' => $organization->id,
                     'schedule_id' => $schedule->id,
@@ -140,6 +150,24 @@ class RunOptimizationAction
 
                 return $run->refresh();
             });
+
+            if (count($result->recommendations) > 0) {
+                $count = count($result->recommendations);
+                $totalProjectedCents = array_sum(array_map(
+                    fn ($recommendation) => $recommendation->projectedSavingsCents,
+                    $result->recommendations,
+                ));
+
+                $this->createAlertAction->execute(
+                    $organization->id,
+                    AlertType::NewOpportunity,
+                    AlertSeverity::Opportunity,
+                    "{$count} new recommendation".($count === 1 ? '' : 's').' ready to review',
+                    'Projected combined savings of '.Money::formatEurCents($totalProjectedCents).'. Review and accept, partially adopt, or reject with a reason on your dashboard.',
+                );
+            }
+
+            return $run;
         } finally {
             $this->currentOrganization->set($previousOrganization);
         }

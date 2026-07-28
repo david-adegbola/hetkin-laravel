@@ -1,7 +1,11 @@
 <?php
 
+use App\Domain\Alerts\Enums\AlertType;
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Billing\Actions\RunVerificationAction;
+use App\Domain\Billing\Contracts\VerificationCalculationService;
+use App\Domain\Billing\DTOs\VerificationCalculationResult;
 use App\Domain\Billing\Enums\VerificationReviewStatus;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\VerificationRecord;
@@ -161,4 +165,65 @@ test('writes an audit log entry with SYSTEM actor', function () {
     expect($entry->action)->toBe('verification_record.computed');
     expect($entry->actor_type->value)->toBe('SYSTEM');
     expect($entry->actor_id)->toBe('run-verification-job');
+});
+
+test('creates a VARIANCE_FLAG alert when the calculation flags variance', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    Baseline::factory()->locked()->for($organization, 'organization')->create();
+    $periodStart = Carbon::parse('2026-01-01', 'UTC');
+    $periodEnd = Carbon::parse('2026-02-01', 'UTC');
+    seedVerificationPeriodData($organization, $periodStart, 100, 50, days: 31);
+
+    // Mocked rather than crafted from raw meter/price data — the exact
+    // variance threshold is App\Domain\Billing\Strategies\
+    // ProvisionalPeriodComparisonStrategy's own concern (covered by its
+    // own tests); this test only needs to prove RunVerificationAction
+    // wires an alert off `varianceFlagged`, whatever produced it.
+    $this->mock(VerificationCalculationService::class, function ($mock) {
+        $mock->shouldReceive('calculate')->once()->andReturn(new VerificationCalculationResult(
+            methodologyVersion: 'provisional-period-comparison-v1',
+            isProvisional: true,
+            baselineCostCents: 900_000,
+            actualCostCents: 1_200_000,
+            verifiedSavingsCents: -300_000,
+            variancePercent: 33.3,
+            varianceFlagged: true,
+            assumptions: [],
+        ));
+    });
+
+    app(RunVerificationAction::class)->execute($periodStart, $periodEnd);
+
+    $alert = Alert::withoutGlobalScope(OrganizationScope::class)
+        ->where('organization_id', $organization->id)->first();
+    expect($alert)->not->toBeNull();
+    expect($alert->type)->toBe(AlertType::VarianceFlag);
+    expect($alert->title)->toBe("This period's verified savings differ from your assessment");
+});
+
+test('does not create an alert when variance is not flagged', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    Baseline::factory()->locked()->for($organization, 'organization')->create();
+    $periodStart = Carbon::parse('2026-01-01', 'UTC');
+    $periodEnd = Carbon::parse('2026-02-01', 'UTC');
+    seedVerificationPeriodData($organization, $periodStart, 100, 50, days: 31);
+
+    $this->mock(VerificationCalculationService::class, function ($mock) {
+        $mock->shouldReceive('calculate')->once()->andReturn(new VerificationCalculationResult(
+            methodologyVersion: 'provisional-period-comparison-v1',
+            isProvisional: true,
+            baselineCostCents: 900_000,
+            actualCostCents: 910_000,
+            verifiedSavingsCents: -10_000,
+            variancePercent: 1.1,
+            varianceFlagged: false,
+            assumptions: [],
+        ));
+    });
+
+    app(RunVerificationAction::class)->execute($periodStart, $periodEnd);
+
+    expect(Alert::query()->where('organization_id', $organization->id)->count())->toBe(0);
 });

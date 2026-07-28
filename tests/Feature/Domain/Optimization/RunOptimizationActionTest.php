@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Alerts\Enums\AlertType;
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Metering\Models\Site;
 use App\Domain\Optimization\Actions\RunOptimizationAction;
@@ -85,6 +87,11 @@ test('creates an optimization run and recommendations for a materially cheaper w
     app(CurrentOrganization::class)->set($organization);
     expect(OptimizationRun::query()->count())->toBe(1);
     expect(Recommendation::query()->where('optimization_run_id', $run->id)->count())->toBe(1);
+
+    $alert = Alert::query()->where('organization_id', $organization->id)->first();
+    expect($alert)->not->toBeNull();
+    expect($alert->type)->toBe(AlertType::NewOpportunity);
+    expect($alert->title)->toBe('1 new recommendation ready to review');
 });
 
 test('writes an audit log entry with the recommendation count', function () {
@@ -128,4 +135,5 @@ test('produces no recommendations when the schedule is already in the cheapest w
 
     app(CurrentOrganization::class)->set($organization);
     expect(Recommendation::query()->where('optimization_run_id', $run->id)->count())->toBe(0);
+    expect(Alert::query()->where('organization_id', $organization->id)->count())->toBe(0);
 });

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Organizations\Models;
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Enums\ProcessType;
@@ -90,5 +91,13 @@ class Organization extends Model
     public function pilotApplication(): BelongsTo
     {
         return $this->belongsTo(PilotApplication::class);
+    }
+
+    /**
+     * @return HasMany<Alert, $this>
+     */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(Alert::class);
     }
 }

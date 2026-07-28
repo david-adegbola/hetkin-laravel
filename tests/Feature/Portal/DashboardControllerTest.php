@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Optimization\Models\OptimizationRun;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Optimization\Models\RecommendationDecision;
@@ -58,4 +59,30 @@ test('a decided recommendation includes its decision', function () {
 
     $response->assertInertia(fn ($page) => $page
         ->where('recentRecommendations.0.decision.decision', 'ACCEPTED'));
+});
+
+test('the dashboard shows the unread alert count and up to 4 recent alerts', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+    Alert::factory()->for($organization, 'organization')->count(5)->create();
+    Alert::factory()->read()->for($organization, 'organization')->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('activeAlertCount', 5)
+        ->has('recentAlerts', 4));
+});
+
+test('the dashboard never shows another organization\'s alerts', function () {
+    ['user' => $user] = portalUser();
+    $otherOrganization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($otherOrganization);
+    Alert::factory()->for($otherOrganization, 'organization')->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('activeAlertCount', 0)
+        ->has('recentAlerts', 0));
 });

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Billing\Actions\UpdateOrganizationPricingAction;
 use App\Domain\Billing\Exceptions\BillingActionException;
@@ -124,6 +125,12 @@ class OrganizationController extends Controller
             ->limit(50)
             ->get();
 
+        $alerts = Alert::withoutGlobalScope(OrganizationScope::class)
+            ->where('organization_id', $organization->id)
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
         return Inertia::render('Admin/Organizations/Show', [
             'organization' => [
                 'id' => $organization->id,
@@ -193,6 +200,14 @@ class OrganizationController extends Controller
                 'entity_id' => $entry->entity_id,
                 'metadata' => $entry->metadata,
                 'created_at' => $entry->created_at->toIso8601String(),
+            ]),
+            'alerts' => $alerts->map(fn (Alert $alert) => [
+                'id' => $alert->id,
+                'type' => $alert->type->value,
+                'severity' => $alert->severity->value,
+                'title' => $alert->title,
+                'body' => $alert->body,
+                'created_at' => $alert->created_at->toIso8601String(),
             ]),
         ]);
     }

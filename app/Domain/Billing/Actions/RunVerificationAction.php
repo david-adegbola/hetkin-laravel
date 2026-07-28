@@ -2,6 +2,9 @@
 
 namespace App\Domain\Billing\Actions;
 
+use App\Domain\Alerts\Actions\CreateAlertAction;
+use App\Domain\Alerts\Enums\AlertSeverity;
+use App\Domain\Alerts\Enums\AlertType;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -15,6 +18,7 @@ use App\Domain\Billing\Exceptions\InsufficientVerificationDataException;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\SavingsAssessment;
 use App\Domain\Billing\Models\VerificationRecord;
+use App\Domain\Billing\Reports\Money;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Scopes\OrganizationScope;
@@ -33,10 +37,9 @@ use Throwable;
  * App\Domain\Billing\Actions\ApproveLiveAction can, and only after
  * ConfirmShadowReviewAction. A plain callable class, extracted the same
  * way v2 extracted this from its cron route handler — so the exact same
- * logic runs whether triggered by a future Stage 10 scheduled command or
- * an admin's manual "Run now" (Stage 9's /admin/jobs). Neither trigger is
- * wired up yet; this Action exists and is fully tested so both can call it
- * directly once built.
+ * logic runs whether triggered by the monthly scheduled command (Stage 10,
+ * `triggered_by: "cron"`) or an admin's manual "Run now" (Stage 9's
+ * /admin/jobs, `triggered_by: <adminUser.id>`).
  *
  * Genuinely cross-tenant (iterates every organization with a locked
  * baseline in one process) — bypasses OrganizationScope explicitly on
@@ -54,6 +57,7 @@ class RunVerificationAction
     public function __construct(
         private readonly VerificationCalculationService $service,
         private readonly AuditLogService $auditLogService,
+        private readonly CreateAlertAction $createAlertAction,
     ) {}
 
     /**
@@ -185,9 +189,21 @@ class RunVerificationAction
                     ));
                 });
 
-                // Deliberately omitted, matching v2 features this port
-                // hasn't built yet: the VARIANCE_FLAG Alert (Stage 10) and
-                // the `verification_computed` PostHog event (Stage 11).
+                // Deliberately still omitted, matching a v2 feature this
+                // port hasn't built yet: the `verification_computed`
+                // PostHog event (Stage 11).
+                if ($result->varianceFlagged) {
+                    $this->createAlertAction->execute(
+                        $organization->id,
+                        AlertType::VarianceFlag,
+                        AlertSeverity::Warning,
+                        "This period's verified savings differ from your assessment",
+                        'Verified savings of '.Money::formatEurCents($result->verifiedSavingsCents).
+                            ' for '.$periodStart->format('d/m/Y').'–'.$periodEnd->format('d/m/Y').
+                            ' came in outside the expected range. This is under internal review before it affects billing — see your Reports page for detail.',
+                    );
+                }
+
                 $results[] = ['organizationId' => $organization->id, 'status' => 'computed'];
             } catch (Throwable $e) {
                 $results[] = ['organizationId' => $organization->id, 'status' => 'error', 'detail' => $e->getMessage()];

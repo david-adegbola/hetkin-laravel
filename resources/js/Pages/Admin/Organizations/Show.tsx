@@ -90,6 +90,15 @@ interface ActivityRow {
     created_at: string;
 }
 
+interface AlertRow {
+    id: string;
+    type: string;
+    severity: string;
+    title: string;
+    body: string;
+    created_at: string;
+}
+
 interface ShowProps {
     organization: OrganizationDetail;
     members: MemberRow[];
@@ -99,19 +108,26 @@ interface ShowProps {
     verification_records: VerificationRow[];
     invoices: InvoiceRow[];
     activity: ActivityRow[];
+    alerts: AlertRow[];
 }
 
 function hasRole(role: AdminRole | undefined, allowed: AdminRole[]): boolean {
     return !!role && allowed.includes(role);
 }
 
+function severityDotClass(severity: string): string {
+    if (severity === 'WARNING') return 'bg-error';
+    if (severity === 'OPPORTUNITY') return 'bg-success';
+
+    return 'bg-primary';
+}
+
 /**
  * Mirrors the Next.js app's src/app/admin/(protected)/organizations/
- * [id]/page.tsx — the org 360 view. Every mutation form is conditionally
- * rendered by role client-side, matching v2's own UX (the server still
- * enforces every role gate regardless — see routes/admin-protected.php).
- * The Alerts section is deliberately skipped: the Alert model doesn't
- * exist in this port yet (Stage 10).
+ * [id]/page.tsx — the org 360 view, including the "Recent alerts" section
+ * (Stage 10). Every mutation form is conditionally rendered by role
+ * client-side, matching v2's own UX (the server still enforces every role
+ * gate regardless — see routes/admin-protected.php).
  */
 export default function Show({
     organization,
@@ -122,6 +138,7 @@ export default function Show({
     verification_records,
     invoices,
     activity,
+    alerts,
 }: ShowProps) {
     const base = useAdminBasePath();
     const { auth } = usePage<PageProps>().props;
@@ -333,6 +350,40 @@ export default function Show({
                                         'en-GB',
                                     )}
                                 </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Card>
+
+            <Card className="mb-6">
+                <CardTitle className="mb-3">Recent alerts</CardTitle>
+                {alerts.length === 0 ? (
+                    <EmptyRow />
+                ) : (
+                    <ul className="space-y-3">
+                        {alerts.map((alert) => (
+                            <li
+                                key={alert.id}
+                                className="border-border flex items-start gap-3 border-b pb-3 last:border-0"
+                            >
+                                <span
+                                    className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${severityDotClass(alert.severity)}`}
+                                    aria-hidden="true"
+                                />
+                                <div className="flex-1">
+                                    <div className="text-primary text-sm font-semibold">
+                                        {alert.title}
+                                    </div>
+                                    <p className="text-text-secondary mt-0.5 text-sm">
+                                        {alert.body}
+                                    </p>
+                                    <div className="text-text-secondary mt-1 text-xs">
+                                        {new Date(
+                                            alert.created_at,
+                                        ).toLocaleDateString('en-GB')}
+                                    </div>
+                                </div>
                             </li>
                         ))}
                     </ul>

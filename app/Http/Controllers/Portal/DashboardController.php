@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Portal;
 
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Http\Controllers\Controller;
@@ -10,18 +11,17 @@ use Inertia\Response;
 
 /**
  * Portal overview — mirrors the Next.js app's src/app/(portal)/dashboard/
- * page.tsx in spirit, not yet in full: that page's stat cards (verified
- * savings MTD/YTD, recommendation adoption rate, active alerts) and
- * "alerts" panel query VerificationRecord and Alert, neither of which
- * exists yet (Stage 7's Baseline/Savings/Verification, Stage 10's
- * background-job-driven Alerts). Rendering an approximation of that page
- * now, backed by nothing, would show numbers and panels that don't mean
- * what they claim to — worse than an honest interim page. See
- * MIGRATION_PLAN.md ADR-33.
+ * page.tsx in spirit, not yet in full: that page's OTHER three stat cards
+ * (verified savings MTD/YTD, recommendation adoption rate) query
+ * VerificationRecord aggregates this port hasn't built a view for yet —
+ * a distinct gap from Alerts, not blocked by anything Stage 10 builds.
+ * Rendering an approximation now, backed by nothing, would show numbers
+ * that don't mean what they claim to — worse than an honest interim page.
+ * See MIGRATION_PLAN.md ADR-33.
  *
- * "Recent recommendations" IS real as of Stage 6 — Recommendation/
- * RecommendationDecision now exist — so that one panel from v2's page is
- * included; the rest stays deferred until its own data exists.
+ * "Recent recommendations" (Stage 6) and "Active alerts"/"Alerts" (Stage
+ * 10) ARE real and ported in full — the rest stays deferred until its own
+ * data exists.
  */
 class DashboardController extends Controller
 {
@@ -36,6 +36,10 @@ class DashboardController extends Controller
             ->take(3)
             ->get();
 
+        $activeAlertCount = Alert::query()->whereNull('read_at')->count();
+
+        $recentAlerts = Alert::query()->latest('created_at')->take(4)->get();
+
         return Inertia::render('Portal/Dashboard', [
             'recentRecommendations' => $recentRecommendations->map(fn (Recommendation $recommendation) => [
                 'id' => $recommendation->id,
@@ -49,6 +53,15 @@ class DashboardController extends Controller
                     'reason' => $recommendation->decision->reason,
                     'adjusted_start_at' => $recommendation->decision->adjusted_start_at?->toIso8601String(),
                 ] : null,
+            ]),
+            'activeAlertCount' => $activeAlertCount,
+            'recentAlerts' => $recentAlerts->map(fn (Alert $alert) => [
+                'id' => $alert->id,
+                'type' => $alert->type->value,
+                'severity' => $alert->severity->value,
+                'title' => $alert->title,
+                'body' => $alert->body,
+                'created_at' => $alert->created_at->toIso8601String(),
             ]),
         ]);
     }

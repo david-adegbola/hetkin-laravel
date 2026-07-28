@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Alerts\Enums\AlertType;
+use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Billing\Actions\GenerateSavingsAssessmentAction;
 use App\Domain\Billing\Enums\BaselineStatus;
@@ -11,6 +13,7 @@ use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Metering\Models\Site;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Organizations\Scopes\OrganizationScope;
 use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Enums\PriceSource;
 use App\Domain\Pricing\Models\ElectricityPrice;
@@ -162,4 +165,18 @@ test('writes an audit log entry for the generated assessment', function () {
     expect($entry->action)->toBe('savings_assessment.generated');
     expect($entry->organization_id)->toBe($organization->id);
     expect($entry->entity_id)->toBe($assessment->id);
+});
+
+test('creates a REPORT_READY alert unconditionally on a successful generation', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+    seedFlatSavingsWeek($organization, 100, 50);
+
+    app(GenerateSavingsAssessmentAction::class)->execute($organization, $user);
+
+    $alert = Alert::withoutGlobalScope(OrganizationScope::class)
+        ->where('organization_id', $organization->id)->first();
+    expect($alert)->not->toBeNull();
+    expect($alert->type)->toBe(AlertType::ReportReady);
+    expect($alert->title)->toBe('Your savings assessment is ready');
 });
