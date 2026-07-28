@@ -115,4 +115,17 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Pilot Application Notification Address
+    |--------------------------------------------------------------------------
+    |
+    | Mirrors the Next.js app's CONTACT_EMAIL env var (src/app/pilot-program/
+    | apply/actions.ts's notifyTeam()) — where the internal "new pilot
+    | application" notification goes.
+    |
+    */
+
+    'pilot_notification_address' => env('CONTACT_EMAIL', 'hello@hetkin.app'),
+
 ];

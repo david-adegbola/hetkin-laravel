@@ -4,7 +4,6 @@ use App\Http\Controllers\Admin\Auth\AuthenticatedSessionController as AdminAuthe
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Middleware\UseSessionRealm;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 /**
  * dashboard.* / admin.* subdomain route groups (MIGRATION_PLAN.md ADR-21) —
@@ -25,7 +24,10 @@ use Inertia\Inertia;
  *                                bare "/admin", so root renders sign-in
  *                                rather than 404ing)
  *   admin.*     + "/sign-in" -> admin sign-in (bare)
- *   admin.*     + "/pilots"  -> admin pilots placeholder (bare)
+ *   admin.*     + "/pilots"  -> admin pilots review queue (bare) — shared
+ *                                with routes/admin.php via
+ *                                routes/admin-protected.php, same pattern
+ *                                as the dashboard.* group below
  *
  * Action routes (logout, password reset, settings mutations, ...) are
  * deliberately NOT re-registered here: none of them carry a domain()
@@ -67,7 +69,5 @@ Route::domain('admin.'.config('app.domain'))
                 ->name('admin.subdomain.home');
         });
 
-        Route::middleware('auth:admin')
-            ->get('pilots', fn () => Inertia::render('Admin/PilotsPlaceholder'))
-            ->name('admin.subdomain.pilots');
+        Route::name('admin.subdomain.')->group(require __DIR__.'/admin-protected.php');
     });

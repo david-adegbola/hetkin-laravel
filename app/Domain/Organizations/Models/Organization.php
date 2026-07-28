@@ -5,11 +5,13 @@ namespace App\Domain\Organizations\Models;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Organizations\Enums\OrganizationStatus;
 use App\Domain\Organizations\Enums\ProcessType;
+use App\Domain\Pilots\Models\PilotApplication;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -18,13 +20,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * ProductionSchedule, etc. from Stage 4 onward) belongs to. This model
  * itself is NOT scoped by App\Domain\Organizations\Concerns\
  * BelongsToOrganization — it IS the tenant, not a tenant-owned row.
- *
- * `pilot_application_id` is deliberately absent — see the creating
- * migration's comment (Stage 8 adds it).
  */
 #[Fillable([
     'name', 'slug', 'logo', 'status', 'base_fee_cents',
     'revenue_share_percent', 'stripe_customer_id', 'process_type',
+    'pilot_application_id',
 ])]
 class Organization extends Model
 {
@@ -74,5 +74,13 @@ class Organization extends Model
     public function auditLogEntries(): HasMany
     {
         return $this->hasMany(AuditLogEntry::class);
+    }
+
+    /**
+     * @return BelongsTo<PilotApplication, $this>
+     */
+    public function pilotApplication(): BelongsTo
+    {
+        return $this->belongsTo(PilotApplication::class);
     }
 }

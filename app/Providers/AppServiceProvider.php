@@ -96,6 +96,16 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(3)->by($request->ip());
         });
 
+        // Public, unauthenticated route — matches the Next.js app's
+        // checkRateLimit('pilot-application:${ip}', 5, 10 * 60 * 1000)
+        // (src/app/pilot-program/apply/actions.ts) exactly: 5 submissions
+        // per IP per 10 minutes. Laravel's cache-backed limiter replaces
+        // v2's in-memory one — see that file's own comment on why in-memory
+        // doesn't survive multiple instances; the cache-backed version does.
+        RateLimiter::for('pilot-application', function (Request $request) {
+            return Limit::perMinutes(10, 5)->by($request->ip());
+        });
+
         // Explicit registration, not relying on Laravel's naming-convention
         // auto-discovery: these all live under App\Domain\*\Models, not
         // App\Models, which the default guesser doesn't check.

@@ -55,13 +55,13 @@ test('the admin sign-in page also renders at the bare /sign-in path on the admin
         ->assertInertia(fn ($page) => $page->component('Admin/Auth/Login'));
 });
 
-test('an authenticated admin sees the pilots placeholder bare on the admin subdomain', function () {
+test('an authenticated admin sees the pilots review queue bare on the admin subdomain', function () {
     $admin = AdminUser::factory()->create();
 
     $this->actingAs($admin, 'admin')
         ->get('http://admin.localhost/pilots')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Admin/PilotsPlaceholder'));
+        ->assertInertia(fn ($page) => $page->component('Admin/Pilots'));
 });
 
 test('a guest hitting the admin subdomain pilots page is sent to that subdomain\'s own sign-in', function () {

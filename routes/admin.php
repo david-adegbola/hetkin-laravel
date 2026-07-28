@@ -3,7 +3,6 @@
 use App\Http\Controllers\Admin\Auth\AuthenticatedSessionController;
 use App\Http\Middleware\UseSessionRealm;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 /**
  * Admin realm. Every route here carries `UseSessionRealm::class.':admin'`
@@ -29,14 +28,5 @@ Route::prefix('admin')
                 ->name('login.attempt');
         });
 
-        Route::middleware('auth:admin')->group(function () {
-            Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
-                ->name('logout');
-
-            // TODO(Stage 9 — Admin console): replace with the real pilots
-            // review page. Placeholder only proves the admin guard +
-            // session-realm isolation end to end (MIGRATION_PLAN.md ADR-10).
-            Route::get('pilots', fn () => Inertia::render('Admin/PilotsPlaceholder'))
-                ->name('pilots');
-        });
+        Route::group([], require __DIR__.'/admin-protected.php');
     });
