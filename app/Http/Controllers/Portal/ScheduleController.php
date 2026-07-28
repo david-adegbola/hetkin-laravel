@@ -2,6 +2,12 @@
 
 namespace App\Http\Controllers\Portal;
 
+use App\Domain\Optimization\Actions\ApplyDecisionsToNewScheduleVersionAction;
+use App\Domain\Optimization\Actions\RunOptimizationAction;
+use App\Domain\Optimization\Enums\RecommendationDecisionType;
+use App\Domain\Optimization\Exceptions\OptimizationActionException;
+use App\Domain\Optimization\Models\Recommendation;
+use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Scheduling\Actions\AddScheduleBlockAction;
 use App\Domain\Scheduling\Models\ProductionSchedule;
@@ -16,12 +22,8 @@ use Inertia\Response;
 
 /**
  * Mirrors the Next.js app's src/app/(portal)/dashboard/schedule/{page.tsx,
- * history/page.tsx} + actions.ts's addScheduleBlock(). Deliberately does
- * NOT include runOptimization()/applyDecisionsToNewScheduleVersion() or
- * their pending-decision-count display — both depend on the Optimization/
- * Recommendations domain (Stage 6), which doesn't exist yet. See
- * DashboardController's docblock and MIGRATION_PLAN.md ADR-33 for the same
- * reasoning applied here.
+ * history/page.tsx} + actions.ts's addScheduleBlock()/runOptimization()/
+ * applyDecisionsToNewScheduleVersion().
  */
 class ScheduleController extends Controller
 {
@@ -33,10 +35,18 @@ class ScheduleController extends Controller
             ->with(['blocks' => fn ($query) => $query->orderBy('start_at'), 'blocks.site'])
             ->first();
 
+        $pendingDecisionCount = $schedule
+            ? RecommendationDecision::query()
+                ->whereIn('decision', [RecommendationDecisionType::Accepted, RecommendationDecisionType::Partial])
+                ->whereHas('recommendation.scheduleBlock', fn ($query) => $query->where('schedule_id', $schedule->id))
+                ->count()
+            : 0;
+
         return Inertia::render('Portal/Schedule', [
             'schedule' => $schedule ? [
                 'version' => $schedule->version,
                 'status' => $schedule->status->value,
+                'hasBlocksWithEstimatedKwh' => $schedule->blocks->contains(fn ($block) => $block->estimated_kwh !== null),
                 'blocks' => $schedule->blocks->map(fn ($block) => [
                     'id' => $block->id,
                     'site_name' => $block->site->name,
@@ -46,6 +56,11 @@ class ScheduleController extends Controller
                     'estimated_kwh' => $block->estimated_kwh !== null ? (float) $block->estimated_kwh : null,
                 ]),
             ] : null,
+            'pendingDecisionCount' => $pendingDecisionCount,
+            // Explicit forwarding, not assumed automatic — see
+            // MIGRATION_PLAN.md ADR-20/ADR-36.
+            'optimizationStatus' => session('optimizationStatus'),
+            'applyDecisionsStatus' => session('applyDecisionsStatus'),
         ]);
     }
 
@@ -67,6 +82,43 @@ class ScheduleController extends Controller
         );
 
         return back()->with('status', 'schedule-block-added');
+    }
+
+    public function optimize(
+        RunOptimizationAction $action,
+        CurrentOrganization $currentOrganization,
+    ): RedirectResponse {
+        /** @var User $user */
+        $user = Auth::guard('web')->user();
+
+        try {
+            $run = $action->execute($currentOrganization->get(), $user);
+        } catch (OptimizationActionException $e) {
+            return back()->withErrors(['optimization' => $e->getMessage()]);
+        }
+
+        $recommendationCount = Recommendation::query()->where('optimization_run_id', $run->id)->count();
+
+        return back()->with('optimizationStatus', ['recommendationCount' => $recommendationCount]);
+    }
+
+    public function applyDecisions(
+        ApplyDecisionsToNewScheduleVersionAction $action,
+        CurrentOrganization $currentOrganization,
+    ): RedirectResponse {
+        /** @var User $user */
+        $user = Auth::guard('web')->user();
+
+        try {
+            $result = $action->execute($currentOrganization->get(), $user);
+        } catch (OptimizationActionException $e) {
+            return back()->withErrors(['applyDecisions' => $e->getMessage()]);
+        }
+
+        return back()->with('applyDecisionsStatus', [
+            'newVersion' => $result->newVersion,
+            'blocksChanged' => $result->blocksChanged,
+        ]);
     }
 
     public function history(): Response

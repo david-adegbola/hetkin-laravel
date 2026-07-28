@@ -3,12 +3,14 @@
 namespace App\Domain\Scheduling\Models;
 
 use App\Domain\Metering\Models\Site;
+use App\Domain\Optimization\Models\Recommendation;
 use Database\Factories\ScheduleBlockFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Mirrors the Next.js app's `ScheduleBlock` Prisma model. Deliberately NOT
@@ -58,5 +60,13 @@ class ScheduleBlock extends Model
     public function site(): BelongsTo
     {
         return $this->belongsTo(Site::class);
+    }
+
+    /**
+     * @return HasMany<Recommendation, $this>
+     */
+    public function recommendations(): HasMany
+    {
+        return $this->hasMany(Recommendation::class, 'schedule_block_id');
     }
 }

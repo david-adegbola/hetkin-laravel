@@ -2,6 +2,7 @@
 
 namespace App\Domain\Scheduling\Models;
 
+use App\Domain\Optimization\Models\OptimizationRun;
 use App\Domain\Organizations\Concerns\BelongsToOrganization;
 use App\Domain\Scheduling\Enums\ScheduleStatus;
 use App\Models\User;
@@ -54,5 +55,13 @@ class ProductionSchedule extends Model
     public function blocks(): HasMany
     {
         return $this->hasMany(ScheduleBlock::class, 'schedule_id');
+    }
+
+    /**
+     * @return HasMany<OptimizationRun, $this>
+     */
+    public function optimizationRuns(): HasMany
+    {
+        return $this->hasMany(OptimizationRun::class, 'schedule_id');
     }
 }

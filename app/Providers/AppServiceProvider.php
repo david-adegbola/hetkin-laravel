@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Domain\Auth\Models\SessionRecord;
 use App\Domain\Metering\Models\MeteringPoint;
 use App\Domain\Metering\Models\Site;
+use App\Domain\Optimization\Contracts\RecommendationEngine;
+use App\Domain\Optimization\Strategies\ProvisionalWindowShiftStrategy;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Member;
@@ -38,6 +40,13 @@ class AppServiceProvider extends ServiceProvider
         // this is safe under standard php-fpm/CGI but not Octane as-is
         // (MIGRATION_PLAN.md ADR-12).
         $this->app->singleton(CurrentOrganization::class);
+
+        // The "single swap point" src/lib/optimization/index.ts describes
+        // (everything that needs recommendations calls one function rather
+        // than importing a strategy class directly) — the Laravel-idiomatic
+        // equivalent is binding the interface once, here, rather than a
+        // factory function every caller invokes.
+        $this->app->bind(RecommendationEngine::class, ProvisionalWindowShiftStrategy::class);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\DataController;
+use App\Http\Controllers\Portal\RecommendationController;
 use App\Http\Controllers\Portal\ScheduleController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,11 @@ return function (): void {
 
         Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule');
         Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
+        Route::post('schedule/optimize', [ScheduleController::class, 'optimize'])->name('schedule.optimize');
+        Route::post('schedule/apply-decisions', [ScheduleController::class, 'applyDecisions'])->name('schedule.apply-decisions');
         Route::get('schedule/history', [ScheduleController::class, 'history'])->name('schedule.history');
+
+        Route::post('recommendations/{recommendation}/decide', [RecommendationController::class, 'decide'])
+            ->name('recommendations.decide');
     });
 };
