@@ -30,10 +30,17 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Host-aware since Stage 2 (MIGRATION_PLAN.md ADR-21): matches v2's
+        // exact post-login destination (src/app/admin/sign-in/page.tsx
+        // pushes to `${adminBasePath}/pilots`, computed from the current
+        // host at redirect time — same idea here).
         // TODO(Stage 9 — Admin console): replace with the real admin
-        // overview redirect. Matches v2's exact post-login destination
-        // (src/app/admin/sign-in/page.tsx pushes to `${adminBasePath}/pilots`).
-        return redirect()->intended(route('admin.pilots', absolute: false));
+        // overview redirect once it exists.
+        $target = $request->getHost() === 'admin.'.config('app.domain')
+            ? route('admin.subdomain.pilots', absolute: false)
+            : route('admin.pilots', absolute: false);
+
+        return redirect()->intended($target);
     }
 
     public function destroy(Request $request): RedirectResponse

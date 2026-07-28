@@ -62,7 +62,8 @@ review) — building it earlier would mean building it twice.
 |---|---|---|
 | 1. Foundation | **Complete** | ADR-1..ADR-12 |
 | Account Security module | **Complete** | Out-of-band addition, ahead of Stage 2 — ADR-13..ADR-20. Customer portal only. |
-| 2–12 | Not started | |
+| 2. Routing / multi-tenancy plumbing | **Complete** | ADR-21 |
+| 3–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -164,6 +165,8 @@ full behavior, not a shortcut: the subdomain→path rewrite (`dashboard.*` →
 `/dashboard`, `admin.*` → `/admin`) is genuinely separate infrastructure
 that touches every future route, so it gets its own stage immediately after
 this one rather than being bolted onto the auth work.
+
+Built in Stage 2 — see ADR-21 for what was actually implemented.
 
 ### ADR-10: Post-login destinations are placeholders in Stage 1 only
 
@@ -429,3 +432,114 @@ first will pass with the feature partly broken. Automated coverage passing
 is necessary but was not sufficient here; the real browser walkthrough is
 what actually caught both of these, which is why it stayed in the
 process even with 88 tests green.
+
+---
+
+## Stage 2: Routing / Multi-tenancy Plumbing
+
+### ADR-21: `Route::domain()` with explicit dual registration, not a rewrite-before-routing middleware
+
+**The problem**: v2's `src/proxy.ts` intercepts every request *before*
+Next.js resolves a route and rewrites `dashboard.hetkin.app/schedule` to
+resolve against `/dashboard/schedule` internally — a true rewrite, not a
+redirect, so the browser's address bar never changes. Laravel has no direct
+equivalent of "mutate the path, then let normal routing continue": by the
+time any middleware runs, `Illuminate\Routing\Router` has typically already
+resolved which route matched (route-specific middleware only runs for an
+already-matched route), so a rewrite-before-routing middleware would mean
+fighting the framework's dispatch order — mutating a Symfony `Request`'s
+cached `pathInfo` via undocumented internals, not a supported extension
+point.
+
+**What Laravel offers natively instead**: `Route::domain()` — host-based
+route matching, resolved by the router at the same point path-matching
+happens, no rewriting required. `routes/domains.php` registers two such
+groups (`dashboard.{app.domain}`, `admin.{app.domain}`), each with its own
+bare-path routes reusing the *exact same* controllers as the equivalent
+main-domain routes in `routes/web.php` / `routes/admin.php` — e.g.
+`portal.home` (bare `/` on `dashboard.*`) and `dashboard` (prefixed
+`/dashboard` on the main domain) both render `Portal/DashboardPlaceholder`
+via the same closure.
+
+**Trade-off accepted**: this means every future portal/admin page needs a
+second `Route::` registration line when it's added (one for the main-domain
+prefixed path, one for the subdomain bare path) — real duplication, unlike
+v2's fully generic rewrite. Alternatives considered and rejected:
+- A shared route-definition closure invoked twice (once under
+  `Route::domain()`, once under `Route::prefix()`) — breaks down because
+  sign-in is a genuine asymmetry: it needs to be bare on *both* the main
+  domain and the subdomain (v2's own explicit `passthrough` carve-out in
+  `SUBDOMAIN_RULES`), so it can't cleanly live inside a "mount this file
+  under a prefix" abstraction alongside routes that always take the prefix.
+- Laravel's `Route::group($attributes, $filePath)` (mounting a route file
+  twice with different attributes) — same asymmetry problem, plus route
+  *names* would collide across the two mounts without extra bookkeeping
+  that erases most of the DRY benefit anyway.
+
+Given the current feature surface is small (one portal page, one admin
+page, both placeholders), explicit duplication was judged cheaper *and*
+more debuggable than a generic abstraction built ahead of the shapes that
+would actually stress-test it. **Revisit if Stage 5/Stage 9 (the real
+portal and admin console) make the duplication genuinely painful** — at
+that point, a route-name-driven code generator or the `Route::group()` file
+trick applied only to the routes that don't include sign-in becomes worth
+the complexity.
+
+**Also changed as part of this**: `AuthenticatedSessionController::store()`
+(customer) and `Admin\Auth\AuthenticatedSessionController::store()` (admin)
+both previously hardcoded their post-login redirect to the main-domain
+prefixed route unconditionally — a leftover Stage 1 TODO, since Stage 2
+(this rewrite) didn't exist yet. Both now check `$request->getHost()` and
+redirect to the subdomain's own bare route when the login happened there,
+matching v2's `${adminBasePath}/pilots`-style dynamic redirect exactly
+(`src/app/admin/sign-in/page.tsx`). `bootstrap/app.php`'s
+`redirectGuestsTo`/`redirectUsersTo` closures got the same host-awareness,
+for the same reason: an unauthenticated visit to `dashboard.hetkin.app/`
+must bounce to `dashboard.hetkin.app/sign-in`, not `hetkin.app/sign-in` —
+silently changing the visible host on a redirect is exactly the failure
+mode the subdomain rewrite exists to prevent.
+
+### ADR-22: Shared Inertia prop instead of a Server/Client component split for base-path links
+
+v2's `src/lib/subdomain-server.ts` / `subdomain-client.ts` exist as two
+files specifically because Next.js Server Components can read the request's
+`Host` header via `headers()` while Client Components can't (and read
+`window.location` instead) — a distinction with no Inertia equivalent,
+since every Inertia page is a single React component hydrated client-side,
+with its initial render already driven by server-computed props. Rather
+than port that two-file split mechanically, `HandleInertiaRequests::share()`
+computes `isDashboardHost` / `isAdminHost` once per request from
+`$request->getHost()` and shares them as an ordinary prop
+(`resources/js/lib/subdomain.ts`'s `usePortalBasePath()` /
+`useAdminBasePath()` read it via `usePage()`) — correct on the very first
+server-rendered response, no `window.location` fallback branch needed for a
+pre-hydration state that doesn't exist here the way it does in Next.js.
+
+### ADR-23: `APP_DOMAIN` config, defaulting to `localhost`
+
+Added `config('app.domain')` (env `APP_DOMAIN`, default `"localhost"`) as
+the single value `routes/domains.php`'s two `Route::domain()` patterns are
+built from — mirrors v2's dedicated `COOKIE_DOMAIN` var rather than trying
+to derive a "bare domain" from `APP_URL` (which may carry a scheme/port
+that a `Route::domain()` pattern must not include). Modern browsers resolve
+`*.localhost` subdomains automatically (RFC 6761) with no `/etc/hosts`
+edit required, so local dev works immediately via
+`http://dashboard.localhost:8000` / `http://admin.localhost:8000` against
+`php artisan serve`. `SESSION_DOMAIN` is deliberately left unset in local
+dev (each subdomain gets its own independent session, matching v2's own
+documented COOKIE_DOMAIN-unset behavior for local dev) and should be set to
+`.hetkin.app` (leading dot) in production so a session cookie is valid
+across the apex domain and both subdomains — see the comments added to
+`.env` / `.env.example` next to both vars.
+
+### ADR-24: Cross-call subdomain-prop assertions hit the same test-client limitation as ADR-19 — split, don't re-litigate
+
+`tests/Feature/SubdomainRoutingTest.php`'s two "shared subdomain prop"
+checks were originally one test issuing `$this->get('http://dashboard.
+localhost/')` then `$this->get('/dashboard')` and asserting opposite prop
+values from each. The second assertion failed intermittently for the same
+structural reason ADR-19 documents for session IDs: Laravel's test client
+doesn't guarantee two sequential calls within one test method are as
+fully isolated as two real requests. Split into two separate tests
+(one call each) immediately, rather than re-investigating — this is
+exactly the guidance ADR-19 already left for later stages.

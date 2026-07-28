@@ -43,16 +43,47 @@ return Application::configure(basePath: dirname(__DIR__))
         // visitor hitting a `guest`-only route (e.g. an admin who's already
         // signed in revisiting /admin/login) redirects within their own
         // realm, not to the other one's post-login destination.
-        $middleware->redirectGuestsTo(
-            fn (Request $request) => $request->is('admin*')
-                ? route('admin.login')
-                : route('login'),
-        );
-        $middleware->redirectUsersTo(
-            fn (Request $request) => $request->is('admin*')
-                ? route('admin.pilots')
-                : route('dashboard'),
-        );
+        //
+        // Also host-aware (MIGRATION_PLAN.md ADR-21, routes/domains.php): a
+        // guest on dashboard.{domain} or admin.{domain} redirects to that
+        // SAME subdomain's bare sign-in route, not the main domain's
+        // prefixed one — bouncing dashboard.hetkin.app to hetkin.app/sign-in
+        // would silently change the host in the address bar, which is
+        // exactly what the subdomain rewrite exists to avoid.
+        $middleware->redirectGuestsTo(function (Request $request) {
+            $host = $request->getHost();
+
+            if ($host === 'admin.'.config('app.domain')) {
+                return route('admin.subdomain.login');
+            }
+
+            if ($request->is('admin*')) {
+                return route('admin.login');
+            }
+
+            if ($host === 'dashboard.'.config('app.domain')) {
+                return route('portal.login');
+            }
+
+            return route('login');
+        });
+        $middleware->redirectUsersTo(function (Request $request) {
+            $host = $request->getHost();
+
+            if ($host === 'admin.'.config('app.domain')) {
+                return route('admin.subdomain.pilots');
+            }
+
+            if ($request->is('admin*')) {
+                return route('admin.pilots');
+            }
+
+            if ($host === 'dashboard.'.config('app.domain')) {
+                return route('portal.home');
+            }
+
+            return route('dashboard');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

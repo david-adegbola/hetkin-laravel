@@ -56,6 +56,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Domain
+    |--------------------------------------------------------------------------
+    |
+    | The apex domain the dashboard.* and admin.* subdomain route groups
+    | (routes/domains.php, MIGRATION_PLAN.md ADR-21) are built from — e.g.
+    | "hetkin.app" in production, so requests to dashboard.hetkin.app and
+    | admin.hetkin.app resolve. Defaults to "localhost", which every modern
+    | browser resolves *.localhost subdomains against automatically (no
+    | /etc/hosts edit needed) — visit http://dashboard.localhost:8000 and
+    | http://admin.localhost:8000 in local dev. Kept separate from `url`
+    | above since APP_URL may carry a scheme/port that Route::domain()
+    | patterns must not include.
+    |
+    */
+
+    'domain' => env('APP_DOMAIN', 'localhost'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

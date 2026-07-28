@@ -30,4 +30,9 @@ export type PageProps<
         user: User | null;
         admin: AdminUser | null;
     };
+    /** See resources/js/lib/subdomain.ts and MIGRATION_PLAN.md ADR-21. */
+    subdomain: {
+        isDashboardHost: boolean;
+        isAdminHost: boolean;
+    };
 };

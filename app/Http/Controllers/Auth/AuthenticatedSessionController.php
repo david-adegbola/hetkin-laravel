@@ -47,11 +47,17 @@ class AuthenticatedSessionController extends Controller
         $user = Auth::guard('web')->user();
         $action->execute($user);
 
+        // Host-aware since Stage 2 (MIGRATION_PLAN.md ADR-21): a login
+        // submitted on dashboard.{domain} lands back on that same
+        // subdomain's bare root, not the main domain's prefixed
+        // "/dashboard" — matches v2's post-login push.
         // TODO(Stage 5 — Scheduling/Portal shell): replace with the real
-        // portal redirect. v2's equivalent (src/app/sign-in/page.tsx)
-        // pushes to the portal base path once the subdomain rewrite exists
-        // (Stage 2); '/dashboard' is the main-domain path it resolves to.
-        return redirect()->intended(route('dashboard', absolute: false));
+        // portal redirect once it exists.
+        $target = $request->getHost() === 'dashboard.'.config('app.domain')
+            ? route('portal.home', absolute: false)
+            : route('dashboard', absolute: false);
+
+        return redirect()->intended($target);
     }
 
     public function destroy(Request $request, LogoutAction $action): RedirectResponse
