@@ -68,7 +68,8 @@ review) — building it earlier would mean building it twice.
 | 5. Scheduling + portal shell | **Complete** | ADR-32..ADR-36 |
 | 6. Optimization & recommendations | **Complete** | ADR-37..ADR-40 |
 | 7. Baseline / Savings Assessment / Verification / Billing | **Complete** | ADR-41..ADR-45 |
-| 8–12 | Not started | |
+| 8. Pilot funnel | **Complete** | ADR-46..ADR-50 |
+| 9–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -1097,3 +1098,148 @@ pilot organization's Billing page is genuinely empty until an admin has
 locked a baseline and walked a verification record through shadow
 review — that's not a gap in this port, it's the intended state machine
 working as designed.
+
+## Stage 8: Pilot Funnel
+
+### ADR-46: `pilot_application` is NOT organization-scoped — it exists precisely because no Organization exists yet
+
+Confirmed against v2's actual RLS policy table list (same method as every
+prior stage's scoping determination): `pilot_application` is absent from
+it, and the source Prisma model has no `organizationId` column at all —
+structurally, an application precedes any Organization existing for it.
+`App\Domain\Pilots\Models\PilotApplication` gets no `BelongsToOrganization`
+trait accordingly; `Admin\PilotApplicationController` and the review
+Actions read/write it as a plain cross-tenant query, no scope bypass
+needed because there's no scope to bypass.
+
+`organizations.pilot_application_id` (nullable, unique) is added via a
+follow-up migration, exactly as the Stage 3 organizations migration's own
+comment forecast: *"Added via a follow-up migration when Stage 8 builds
+that table."* The unique constraint matters later — see ADR-48.
+
+### ADR-47: `invitations.invited_by_user_id` widened from `ulid()` to `string()` — a Stage 3 assumption this stage disproved
+
+Stage 3 typed this column `ulid()` (Postgres `char(26)`) on the reasonable
+assumption that it would only ever hold a real `User`'s ULID — true of
+every invite created before this stage, since nothing else created one.
+v2's own convention for an *admin*-originated invite (as opposed to a
+peer-to-peer one) is `invitedByUserId: `admin:${adminUser.id}`` — a
+41-character string that doesn't fit in `char(26)` and would fail with a
+Postgres "value too long" error on insert. Caught before it ever reached
+Postgres in CI, because SQLite (the test suite's default connection) has
+no fixed-length `char` enforcement and would have silently accepted the
+truncated-looking value — a reminder that this port's dual-connection
+test strategy (MIGRATION_PLAN.md ADR-11) doesn't catch every
+Postgres-specific type constraint, only the ones a query actually
+exercises. Fixed via a follow-up migration (`string()`, i.e. `varchar`)
+rather than editing Stage 3's original — the source Prisma schema always
+typed this column as a bare, unconstrained `String` in the first place, so
+`string()` is what it should have been from the start, not a loosened
+constraint.
+
+### ADR-48: v2's own funnel gaps are ported as-is — dead enum states, no application-level idempotency guard, non-collision-checked slugs
+
+Consistent with ADR-42's precedent (Stage 7) of preserving v2's actual
+behavior over "obviously correct" cleanup:
+
+- **`PilotApplicationStatus::InReview` and `::Nurture` are dead code.**
+  Both are grouped into UI buckets (`InReview` alongside `Pending` in the
+  "still open" queue; `Nurture` gets its own badge color) but no action
+  anywhere transitions an application into either state — only
+  `Pending → Approved` and `Pending → Rejected` are reachable. Ported for
+  schema fidelity; not built out further.
+- **`pilot_applications.reviewer_notes` is a real column with no reader or
+  writer anywhere** — no form field on the admin queue captures it, no
+  action sets it. Same treatment as Stage 7's `Baseline.reviewer_notes`-
+  style dead columns: kept for schema fidelity, not wired to a UI that
+  doesn't exist in v2 either.
+- **`ApprovePilotApplicationAction` has no "already decided?" guard**,
+  matching `approvePilotApplication` exactly. The actual backstop is
+  `organizations.pilot_application_id`'s unique constraint (ADR-46): a
+  second approval of the same application throws a raw database exception
+  (`QueryException` here, an unhandled Prisma `P2002` in v2) rather than
+  failing gracefully or silently no-op'ing. Verified by test — approving
+  twice throws, and only one `Organization` row ever exists per
+  application.
+- **The generated organization slug's random suffix isn't checked for
+  collision** against existing slugs before insert — matches `slugify()`
+  exactly (`Math.random().toString(36).slice(2,7)`, no retry loop). A
+  theoretical collision would surface as a unique-constraint violation on
+  `organizations.slug`, the same ungraceful way v2 would fail.
+
+None of these are silently "fixed" here — flagging them explicitly is
+the point: a rewrite that quietly hardens behavior v2 never had is
+exactly the kind of change the mission brief rules out ("if a signed-in
+customer or admin notices the app changed, that's a bug" cuts both
+ways — a *stricter* app is still a changed one).
+
+### ADR-49: `EnsureAdminRole` middleware — the first real HTTP-context admin role gate in this port, plus a deliberately minimal `AdminLayout`
+
+Every prior stage's admin-only Actions (Stage 7's baseline/verification/
+invoice lifecycle) were built and tested directly, with no controller or
+route wired up yet — Stage 9 (Admin console) was to be where that
+happened. Stage 8's own scope explicitly includes "admin review" as part
+of the pilot funnel, though, so this stage needed a real, enforced
+role check for the first time: `App\Http\Middleware\EnsureAdminRole`
+(`admin.role:ADMIN,SUPPORT`) is the route-level equivalent of v2's
+`requireAdminRole(["ADMIN", "SUPPORT"])` Server Action helper — applied to
+`admin.pilots`/`admin.pilots.approve`/`admin.pilots.reject` in
+`routes/admin-protected.php`, matching v2's exact role list for this
+action (pilot intake being "the sales-adjacent front door of the admin
+surface," per the source comment, not a money-moving or
+savings-methodology action gated to stricter roles). This establishes
+the pattern Stage 9 will reuse for baselines/verification/invoices'
+stricter role lists.
+
+`resources/js/Layouts/AdminLayout.tsx` is new too — deliberately minimal,
+listing only "Pilots" in its nav rather than v2's full ten-item admin
+shell (Overview, Pilots, Organizations, Baselines, Verification, Invoices,
+Jobs, Audit Log, Team, Docs). Same "honest subset" reasoning as
+`PortalLayout` (ADR-33), applied to the admin realm for the first time — a
+nav link to a page that doesn't exist yet would be worse than v2's actual
+behavior. Uses `useAdminBasePath()` (built in Stage 2, ADR-21, but unused
+until now) rather than Ziggy's `route()` helper for its internal
+links/logout — the same subdomain-correctness rule established for
+`PortalLayout` in Stage 5/6, now extended to the admin realm's first real
+page. `routes/admin.php` and `routes/domains.php`'s admin group both
+now `require routes/admin-protected.php` (a new shared-closure file,
+same dual-registration pattern as `routes/portal.php`/ADR-34) rather than
+each duplicating the pilots routes inline, since this group outgrew the
+single-placeholder-route duplication `routes/domains.php` originally
+accepted.
+
+### ADR-50: Invite acceptance combines v2's client/server split into one server-side POST; live smoke test confirmed the full funnel
+
+v2's accept-invitation flow is two calls from the browser: the client
+component calls Better Auth's `signUp.email()` (falling back to
+`signIn.email()` if the account already exists) directly against the auth
+API so its `Set-Cookie` response header lands via a real browser fetch,
+*then* a separate Server Action (`acceptInvitation`) grants org
+membership once that session exists. That split exists purely because a
+Next.js Server Action can't forward another endpoint's `Set-Cookie`
+header — it's not a behavior a customer perceives.
+
+`App\Http\Controllers\InvitationController::store()` does the equivalent
+work in one plain server-side POST: look up (or create) the `User`,
+`Auth::guard('web')->login($user)` (which sets the session cookie
+natively, no cross-request forwarding problem to route around), then run
+`AcceptInvitationAction` (status/expiry/email-match checks, `Member`
+creation, `Invitation` update, audit log — all ported verbatim from
+`acceptInvitation`, including the "re-defensive even though the page also
+checks it — the page's check is for UX, this one is what actually gates
+the write" comment). Same customer-visible contract (submit name +
+password, land in the new org), simpler mechanism — same reasoning as
+ADR-44's dompdf swap.
+
+Following this project's established practice (ADR-20/36/40/45): the
+full funnel was walked in a real browser — submitted a pilot application
+(ICP score 100, confirmed against the exact formula: 60 for a flexible
+process type + 40 for ≥€150k spend), signed in as an admin, approved it
+from the review queue (application moved from "0 pending" to "Reviewed"
+with an `APPROVED` badge, an `Organization` was provisioned, an
+`Invitation` created), followed the resulting invite link, created an
+account, and landed on that organization's portal dashboard as its
+`OWNER`. Confirmed in the database afterward: `Member.role = OWNER`,
+`Invitation.status = accepted`, and all three expected audit-log entries
+(`pilot_application.submitted` → `pilot_application.approved` →
+`invitation.accepted`) present in the hash chain.
