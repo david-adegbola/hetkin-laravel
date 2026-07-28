@@ -64,7 +64,8 @@ review) — building it earlier would mean building it twice.
 | Account Security module | **Complete** | Out-of-band addition, ahead of Stage 2 — ADR-13..ADR-20. Customer portal only. |
 | 2. Routing / multi-tenancy plumbing | **Complete** | ADR-21 |
 | 3. Organizations | **Complete** | ADR-25..ADR-28 |
-| 4–12 | Not started | |
+| 4. Metering | **Complete** | ADR-29..ADR-31 |
+| 5–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -639,3 +640,96 @@ pattern for non-standard namespaces, not a workaround. **Any future Domain
 model that wants `HasFactory` needs the same explicit override** — this
 is now a standing gotcha for every later stage's Domain models, not just
 Organizations'.
+
+---
+
+## Stage 4: Metering
+
+### ADR-29: Only Site gets BelongsToOrganization — MeteringPoint/MeterReading are scoped through it, not directly
+
+The Next.js app's `Site` Prisma model has a direct `organizationId`
+column; `MeteringPoint` and `MeterReading` do not — only `siteId` /
+`meteringPointId` respectively. Confirmed against v2's own RLS policy
+migration (`prisma/migrations/20260724230000_row_level_security_policies`):
+its table list (`member`, `invitation`, `organization_note`, `site`,
+`production_schedule`, ...) includes `site` but deliberately not
+`metering_point` or `meter_reading` — v2 itself never built tenant
+isolation for those two tables beyond "go through an already-scoped Site
+first." This port matches that boundary exactly rather than "improving" it
+by adding a denormalized `organization_id` neither source table has:
+`Site` gets `BelongsToOrganization`; `MeteringPoint`/`MeterReading` get
+plain `belongsTo` relations only, and their Policies
+(`MeteringPointPolicy`) resolve organization membership by querying `Site`
+directly rather than relying on ambient scope.
+
+That last point mattered in practice: an early version of
+`MeteringPointPolicy` read `$meteringPoint->site->organization_id`, which
+lazy-loads `Site` through its *scoped* relation — requiring a
+`CurrentOrganization` to already be bound just to answer "is this user
+allowed to view this." That's circular (authorization is often what
+decides whether to bind one in the first place), so the Policy instead
+queries `Site::withoutGlobalScope(OrganizationScope::class)` directly,
+mirroring `Member::isMemberOf()`'s own explicit opt-out from Stage 3.
+
+Two more things documented in the source as intended but not actually
+built are not ported here either, matching the "rewrite behavior, not
+aspiration" principle from ADR-25: **Datahub integration** (the
+`MeterDataSource.DATAHUB` enum value exists and is referenced in marketing
+copy, but no actual API client exists anywhere in `src/`) and **monthly
+partitioning** of `meter_reading` (the Prisma schema's own comment
+describes it as coming "via a raw-SQL migration alongside this one," but
+no such migration exists anywhere in the repository — confirmed by
+searching every `migration.sql` for partition DDL). If either is ever
+actually built in the source, port it then, not speculatively now.
+
+### ADR-30: `FingridCsvParser` — two real JS/PHP semantic mismatches caught and fixed during the port
+
+`app/Domain/Metering/Services/FingridCsvParser.php` is a line-for-line port
+of `src/lib/meter-csv.ts`'s `parseFingridCsv`, but two spots needed a
+genuinely different PHP implementation to produce the *same behavior*, not
+just similar-looking code:
+
+1. **Decimal-comma replacement.** JS's `qtyStr.replace(",", ".")` (no `/g`
+   flag) replaces only the *first* comma. PHP's `str_replace()` has no
+   such mode — its fourth parameter is an output count, not a limit, and
+   it always replaces every occurrence. Using it directly would silently
+   behave differently on a value containing more than one comma. Fixed
+   with `preg_replace('/,/', '.', $value, 1)`, which does support a limit.
+2. **Lenient numeric parsing.** JS's `parseFloat("12.5kWh")` returns `12.5`
+   — it extracts a leading numeric token and ignores trailing garbage.
+   PHP's `is_numeric()` would reject that same string outright (the whole
+   string must be numeric), which would turn a value Fingrid's export
+   quirks might trail with extra characters into a spurious "Non-numeric
+   quantity" error the original parser never raised for that input. Fixed
+   with a leading-numeric-token regex (`parseFloatLoose()`) that mimics
+   `parseFloat`'s extraction behavior instead of PHP's stricter numeric
+   check.
+
+Both were caught by writing the test suite against the *behavior* (JS
+semantics) rather than against whatever the first PHP draft happened to
+do — worth calling out as a general risk for any future stage porting
+more JS business logic: matching syntax is not the same as matching
+runtime semantics, and the standard-library functions that "obviously"
+correspond to each other (`str_replace`/`.replace()`,
+`is_numeric`/`parseFloat`) are exactly where that gap hides.
+
+### ADR-31: Actions given an explicit Organization must bind CurrentOrganization themselves
+
+`UploadMeterReadingsAction` takes an already-resolved `Organization $organization`
+parameter rather than reading one from ambient request state (consistent
+with every other Action in this app being HTTP/context-agnostic). Its
+first draft queried `Site::query()->firstWhere('organization_id', ...)`
+directly — which still throws under Stage 3's fail-closed
+`OrganizationScope`, because having the organization *available as a
+variable* isn't the same as having it *bound* as the request's
+`CurrentOrganization`, which is what the scope actually checks.
+
+Fixed by having the Action bind `CurrentOrganization` itself for the
+duration of its `execute()` call, restoring whatever was bound before in a
+`finally` block rather than assuming nothing was (it might be called from
+inside an HTTP request that already bound a — possibly different —
+organization, or directly, as in its own tests). **This is now the
+standing pattern for any future Action that receives an explicit
+Organization and needs to query a `BelongsToOrganization` model**: bind
+`CurrentOrganization` at the top of `execute()`, restore the previous
+value in a `finally`, same shape every time.

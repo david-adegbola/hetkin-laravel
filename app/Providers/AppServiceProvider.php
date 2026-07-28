@@ -3,14 +3,18 @@
 namespace App\Providers;
 
 use App\Domain\Auth\Models\SessionRecord;
+use App\Domain\Metering\Models\MeteringPoint;
+use App\Domain\Metering\Models\Site;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Invitation;
 use App\Domain\Organizations\Models\Member;
 use App\Domain\Organizations\Models\Organization;
 use App\Policies\InvitationPolicy;
 use App\Policies\MemberPolicy;
+use App\Policies\MeteringPointPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\SessionPolicy;
+use App\Policies\SitePolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -77,5 +81,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Organization::class, OrganizationPolicy::class);
         Gate::policy(Member::class, MemberPolicy::class);
         Gate::policy(Invitation::class, InvitationPolicy::class);
+        Gate::policy(Site::class, SitePolicy::class);
+        Gate::policy(MeteringPoint::class, MeteringPointPolicy::class);
     }
 }
