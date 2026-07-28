@@ -1449,3 +1449,307 @@ unlike the job cards the *content itself* has no unbuilt dependency — was
 adjusted in one place to describe this honestly (v2's own copy claims
 "three background jobs run on a schedule and can also be triggered
 manually," which would be misleading here).
+
+---
+
+# Post-Migration
+
+Stages 1–12 are the migration proper: parity with `hetkin-v2`, end to end.
+Everything below is post-migration work — it starts only once parity is
+verified and signed off, and it operates under a different mandate.
+Migration work optimizes for one thing: *matching v2's observable
+behavior exactly*, ADR by ADR. Post-migration work optimizes for the
+Laravel codebase's own long-term health — architecture, performance,
+security, and operability — while treating that same behavior as the
+baseline to protect, not the thing being rewritten. Stage 13 makes this
+distinction operational: every ADR from Stages 1–12 gets reviewed and
+classified before anything changes, specifically so a refactor and a
+product decision are never the same commit.
+
+---
+
+## Stage 13: Technical Modernization
+
+### Objective
+
+Now that feature parity has been achieved, perform a technical
+modernization of the Laravel codebase.
+
+This stage is **not** about adding new product features or redesigning
+workflows.
+
+Its purpose is to improve maintainability, architecture, performance,
+security, developer experience, and long-term scalability while
+preserving the existing user experience.
+
+The application should continue behaving exactly as users expect.
+
+Any observable product behaviour changes must come from explicit product
+decisions, not technical refactoring.
+
+### Guiding Principles
+
+Use the ADRs generated throughout the migration as the primary input for
+this stage.
+
+Every ADR should be reviewed and classified before implementation.
+
+Follow this decision framework:
+
+#### 1. Architecture Improvement
+
+Improve internal implementation where there is no externally observable
+behaviour change.
+
+Examples:
+
+- Better Laravel conventions
+- Cleaner domain boundaries
+- Improved dependency injection
+- Better service abstraction
+- Better Actions
+- Better Policies
+- Better Form Requests
+- Better Eloquent relationships
+- Cleaner folder structure
+
+#### 2. Product Behaviour Preservation
+
+Behaviour intentionally implemented during migration should remain
+unchanged.
+
+Do not redesign workflows.
+
+Do not change permissions.
+
+Do not alter business rules.
+
+Do not introduce UX changes.
+
+#### 3. Legacy Product Debt
+
+If an ADR documents legacy behaviour that appears incomplete, unused, or
+questionable:
+
+- do not silently "fix" it
+- review it deliberately
+- determine whether it should remain
+- if changed, document the decision with a new ADR
+- ensure the change is an intentional product decision
+
+#### 4. Security & Data Integrity
+
+Security improvements always take priority.
+
+Examples:
+
+- session security
+- authorization
+- audit logging
+- transactions
+- race conditions
+- CSRF
+- XSS
+- secure headers
+- cookie configuration
+- data integrity
+
+These improvements may be implemented provided they do not intentionally
+alter business behaviour.
+
+### Technical Modernization Scope
+
+Review and improve:
+
+#### Architecture
+
+- remove migration compatibility layers
+- eliminate duplicate logic
+- improve service boundaries
+- improve dependency injection
+- simplify abstractions
+- improve maintainability
+
+#### Performance
+
+- eliminate N+1 queries
+- optimize eager loading
+- improve indexing
+- optimize queries
+- cache expensive operations
+- improve queue usage
+- optimize asset loading
+
+#### Code Quality
+
+- remove dead code
+- improve naming consistency
+- improve type safety
+- improve documentation
+- improve readability
+- improve test coverage
+
+#### Security
+
+Perform a complete security review.
+
+Review:
+
+- authentication
+- authorization
+- session management
+- headers
+- CSP compatibility
+- rate limiting
+- audit logging
+- secure cookies
+
+#### Developer Experience
+
+Improve:
+
+- documentation
+- static analysis
+- CI/CD
+- testing
+- factories
+- seeders
+- local development experience
+
+### Completion Criteria
+
+Stage 13 is complete when:
+
+- all ADRs have been reviewed
+- technical debt has been addressed where appropriate
+- architecture reflects Laravel best practices
+- performance improvements have been implemented
+- security review has been completed
+- codebase is ready for long-term maintenance
+
+---
+
+## Stage 14: Progressive Web Application (PWA)
+
+### Objective
+
+Transform Hetkin into a production-grade Progressive Web Application
+without changing existing workflows or user experience.
+
+This stage should build upon the stable Laravel application completed in
+Stages 1–13.
+
+### Scope
+
+Implement:
+
+- installable desktop and mobile application
+- Web App Manifest
+- Service Worker
+- secure caching strategy
+- offline application shell
+- application versioning
+- automatic cache invalidation
+- build versioning
+- deployment integration
+- update detection
+- update notifications
+- install prompt
+- browser compatibility
+- future push notification architecture
+- documentation
+
+Ensure:
+
+- existing authentication remains secure
+- browser back-button protection remains intact
+- protected content is never cached
+- updates never interrupt active workflows
+- users can refresh when convenient
+- deployments automatically generate application versions
+- frontend and backend versioning remain synchronized
+
+### Completion Criteria
+
+Stage 14 is complete when:
+
+- Hetkin is installable on supported browsers
+- update detection works correctly
+- versioning is automated
+- deployment integration is complete
+- offline experience is implemented
+- security guarantees remain unchanged
+- documentation is complete
+
+---
+
+## Stage 15: Production Readiness
+
+### Objective
+
+Prepare Hetkin for production deployment.
+
+This stage focuses on operational excellence rather than feature
+development.
+
+### Scope
+
+Complete:
+
+#### Performance
+
+- application profiling
+- slow query review
+- queue performance
+- memory usage
+- asset optimization
+
+#### Security
+
+- penetration review
+- dependency audit
+- authentication review
+- authorization review
+- headers review
+
+#### Accessibility
+
+- WCAG review
+- keyboard navigation
+- screen reader testing
+
+#### Quality Assurance
+
+- cross-browser testing
+- responsive testing
+- end-to-end workflow validation
+- regression testing
+
+#### Observability
+
+- error monitoring
+- health checks
+- logging
+- metrics
+- deployment diagnostics
+
+#### Deployment
+
+- production configuration review
+- backup verification
+- rollback testing
+- migration verification
+- deployment checklist
+
+### Completion Criteria
+
+Stage 15 is complete when:
+
+- the application is production-ready
+- monitoring is configured
+- deployment process has been validated
+- rollback procedures have been verified
+- critical workflows have been tested
+- performance targets have been achieved
+- security review has been completed
+- the platform is ready for public release
