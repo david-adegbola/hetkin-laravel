@@ -1,9 +1,22 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+
+// Complements App\Http\Middleware\PreventBackHistoryCache (which stops a
+// page from being cached in the FIRST place) with a fallback for the rare
+// case a browser still momentarily repaints an already-cached page from
+// its back-forward cache (bfcache) before this runs — `persisted: true`
+// on `pageshow` is exactly that signal. Forcing a fresh visit re-runs
+// server-side auth immediately rather than leaving a stale authenticated
+// page interactive. See MIGRATION_PLAN.md ADR-14.
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+        router.reload();
+    }
+});
 
 // Matches the Next.js app's metadata.title template (src/app/layout.tsx):
 // default title with no per-page title set, "%s · Hetkin" otherwise.

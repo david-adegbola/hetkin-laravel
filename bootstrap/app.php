@@ -1,9 +1,13 @@
 <?php
 
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\UseSessionRealm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,8 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            HandleInertiaRequests::class,
+            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         // App\Http\Middleware\UseSessionRealm must run before
@@ -28,8 +32,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // documented way to guarantee the ordering MIGRATION_PLAN.md ADR-4
         // depends on.
         $middleware->prependToPriorityList(
-            before: \Illuminate\Session\Middleware\StartSession::class,
-            prepend: \App\Http\Middleware\UseSessionRealm::class,
+            before: StartSession::class,
+            prepend: UseSessionRealm::class,
         );
 
         // Two isolated auth realms (MIGRATION_PLAN.md ADR-4): an
@@ -40,12 +44,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // signed in revisiting /admin/login) redirects within their own
         // realm, not to the other one's post-login destination.
         $middleware->redirectGuestsTo(
-            fn (\Illuminate\Http\Request $request) => $request->is('admin*')
+            fn (Request $request) => $request->is('admin*')
                 ? route('admin.login')
                 : route('login'),
         );
         $middleware->redirectUsersTo(
-            fn (\Illuminate\Http\Request $request) => $request->is('admin*')
+            fn (Request $request) => $request->is('admin*')
                 ? route('admin.pilots')
                 : route('dashboard'),
         );
