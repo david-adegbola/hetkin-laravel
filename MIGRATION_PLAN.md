@@ -69,7 +69,10 @@ review) — building it earlier would mean building it twice.
 | 6. Optimization & recommendations | **Complete** | ADR-37..ADR-40 |
 | 7. Baseline / Savings Assessment / Verification / Billing | **Complete** | ADR-41..ADR-45 |
 | 8. Pilot funnel | **Complete** | ADR-46..ADR-50 |
-| 9–12 | Not started | |
+| 9. Admin Console | **Complete** | ADR-51..ADR-57 |
+| 10. Background Jobs & Scheduler | **Complete** | ADR-58..ADR-63 |
+| 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | Not started | ENTSO-E itself was pulled forward into Stage 10 (needed by ingest-prices/backfill) — this stage is now mainly Resend, PostHog, Sentry |
+| 12. Marketing site + SEO/OG parity | Not started | |
 
 ## Architecture Decisions
 
