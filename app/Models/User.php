@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Domain\Auth\Models\SessionRecord;
+use App\Domain\Organizations\Models\Member;
+use App\Domain\Organizations\Models\Organization;
 use App\Notifications\PasswordResetRequested;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -55,6 +58,28 @@ class User extends Authenticatable
     public function sessions(): HasMany
     {
         return $this->hasMany(SessionRecord::class, 'user_id');
+    }
+
+    /**
+     * @return HasMany<Member, $this>
+     */
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class);
+    }
+
+    /**
+     * The organizations this user belongs to, via the Member pivot —
+     * mirrors the Next.js app's `member Member[]` relation on `User`
+     * combined with each membership's own `organization` relation.
+     *
+     * @return BelongsToMany<Organization, $this>
+     */
+    public function organizations(): BelongsToMany
+    {
+        return $this->belongsToMany(Organization::class, 'members')
+            ->using(Member::class)
+            ->withPivot('role');
     }
 
     /**

@@ -3,8 +3,10 @@
 namespace App\Domain\Audit\Models;
 
 use App\Domain\Audit\Enums\AuditActorType;
+use App\Domain\Organizations\Models\Organization;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
 /**
@@ -68,6 +70,21 @@ class AuditLogEntry extends Model
     public function getDateFormat(): string
     {
         return 'Y-m-d H:i:s.u';
+    }
+
+    /**
+     * Plain belongsTo, deliberately NOT using
+     * App\Domain\Organizations\Concerns\BelongsToOrganization — this table
+     * is intentionally cross-tenant (see App\Domain\Audit\Services\
+     * AuditLogService's docblock on why the hash chain must read globally,
+     * not per-organization), so it must never gain the fail-closed
+     * OrganizationScope that trait applies.
+     *
+     * @return BelongsTo<Organization, $this>
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
     }
 
     protected static function booted(): void

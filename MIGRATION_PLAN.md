@@ -63,7 +63,8 @@ review) — building it earlier would mean building it twice.
 | 1. Foundation | **Complete** | ADR-1..ADR-12 |
 | Account Security module | **Complete** | Out-of-band addition, ahead of Stage 2 — ADR-13..ADR-20. Customer portal only. |
 | 2. Routing / multi-tenancy plumbing | **Complete** | ADR-21 |
-| 3–12 | Not started | |
+| 3. Organizations | **Complete** | ADR-25..ADR-28 |
+| 4–12 | Not started | |
 
 ## Architecture Decisions
 
@@ -155,6 +156,10 @@ scoping via Eloquent global scopes is the primary enforcement mechanism
 (per the mission brief's explicit instruction to use Eloquent + Policies +
 global scopes for Organizations), and RLS is a defense-in-depth layer added
 on top later, not a blocker for Stage 3.
+
+Built in Stage 3 — see ADR-26 for what was actually implemented (the
+Eloquent-scope layer; RLS SQL policies remain a separate follow-up, not
+delivered here).
 
 ### ADR-9: Subdomain proxy deferred to Stage 2
 
@@ -543,3 +548,94 @@ doesn't guarantee two sequential calls within one test method are as
 fully isolated as two real requests. Split into two separate tests
 (one call each) immediately, rather than re-investigating — this is
 exactly the guidance ADR-19 already left for later stages.
+
+---
+
+## Stage 3: Organizations
+
+### ADR-25: Membership is the only authorization boundary — no OrgRole-based action gating, matching v2's actual current behavior
+
+v2's `OrgRole` enum (OWNER/SCHEDULER/FINANCE/VIEWER) exists in the schema
+and is *displayed* (the portal "team" page badge), but auditing every
+portal Server Action in the Next.js app (`grep -rn "requireRole\|hasRole\|
+role ===" src/app/\(portal\)`) turns up nothing — no code path there
+currently restricts an action by role, only by whether a `Member` row
+exists at all. `OrgRole`-based gating (e.g., only OWNER/SCHEDULER can add a
+schedule block) is never actually implemented in the source this is a
+rewrite of. `OrganizationPolicy`/`MemberPolicy`/`InvitationPolicy` in this
+stage therefore check membership only, same as the source — inventing
+role-based gates the original doesn't have would be adding behavior, not
+porting it, and the mission brief is explicit that this is a rewrite of
+behavior, not a redesign. If a later stage's source code turns out to gate
+something by role after all, that stage's Policy adds the check then, not
+speculatively here. `updateMemberRole` in v2 IS role-gated, but at the
+*admin* layer (`requireAdminRole(["ADMIN", "SUPPORT"])`), not here —
+Stage 9's concern, not Stage 3's.
+
+### ADR-26: Fail-closed `OrganizationScope`, stricter than v2's currently-unenforced RLS
+
+`App\Domain\Organizations\Scopes\OrganizationScope` (applied via the
+`BelongsToOrganization` trait) throws if a query runs against a
+tenant-owned model with no `CurrentOrganization` bound, rather than
+silently returning unscoped/every-tenant's rows. This is deliberately
+**stricter** than v2's own present-day posture: its RLS policies exist as
+written SQL but are documented as not yet FORCEd (see ADR-8), so any v2
+code path that reaches for the raw, unscoped `db` client instead of
+`orgScopedDb()` today silently sees every organization's data with nothing
+in the type system to catch the mistake. Failing closed here is judged
+worth the small ergonomic cost (a genuinely cross-tenant query has to say
+so explicitly via `Model::withoutGlobalScope(OrganizationScope::class)`,
+mirroring Laravel's own `SoftDeletingScope` opt-out shape) because it turns
+"forgot to scope a query" from a silent data leak into an immediate,
+loud failure during development — this strengthens rather than weakens the
+existing security model, which the mission brief permits (it only
+prohibits weakening it).
+
+`CurrentOrganization` is bound as a plain container singleton
+(`App\Providers\AppServiceProvider::register()`), not resolved via a
+request-scoped service or middleware yet — nothing in Stage 3 has an HTTP
+entry point to call it from (no portal pages exist before Stage 5). A
+future stage's portal middleware calls `OrganizationContextResolver::
+resolve()` once per request and binds the result; this stage delivers the
+mechanism and its full test coverage (`OrganizationScopeTest`,
+`OrganizationContextResolverTest`), matching how `AuditLogService` shipped
+fully tested in Stage 1 before any domain event used it. Same
+container-freshness caveat as `UseSessionRealm` (ADR-12) applies: safe
+under standard php-fpm/CGI, needs revisiting before Octane.
+
+### ADR-27: Two irregularities preserved exactly from the Prisma schema, not "fixed"
+
+- `invitations.invited_by_user_id` has **no foreign key constraint**. The
+  Prisma schema declares it as a bare scalar (`invitedByUserId String`)
+  with no `@relation` — Prisma itself never generated a constraint or a
+  relation accessor for it. Matched exactly: a plain `ulid()` column, no
+  `Eloquent belongsTo()`. Adding a constraint the original never had would
+  be a schema improvement this rewrite doesn't get to make unilaterally.
+- `organizations.pilot_application_id` is **absent entirely**. The Prisma
+  schema has it as a nullable FK to `PilotApplication`, a table that
+  doesn't exist until Stage 8's pilot funnel. An organization doesn't need
+  it to function (one can exist without ever having gone through a pilot
+  application — e.g., created directly by an admin), so it's added via a
+  follow-up migration when Stage 8 builds that table, the same pattern
+  already used for `audit_log_entries.organization_id`'s FK in this same
+  stage (deferred from Stage 1, added here once the referenced table
+  exists).
+
+### ADR-28: Domain-namespaced models need an explicit `newFactory()` override
+
+`Illuminate\Database\Eloquent\Factories\Factory`'s default resolver derives
+a model's factory class by stripping an `App\Models\` (or bare `App\`)
+prefix and appending the remainder to `Database\Factories\`. Every model
+under `App\Domain\*\Models` (all of Organizations here, and `SessionRecord`
+before it) fails that guess — it would resolve
+`App\Domain\Organizations\Models\Organization` to
+`Database\Factories\Domain\Organizations\Models\OrganizationFactory`, not
+the flat `Database\Factories\OrganizationFactory` every factory in this
+app actually lives at. `SessionRecord` never surfaced this because nothing
+gives it a factory (tests write session rows directly). `Organization`,
+`Member`, and `Invitation` all need one, so each overrides `newFactory()`
+explicitly rather than relying on the guess — the documented, supported
+pattern for non-standard namespaces, not a workaround. **Any future Domain
+model that wants `HasFactory` needs the same explicit override** — this
+is now a standing gotcha for every later stage's Domain models, not just
+Organizations'.

@@ -3,6 +3,13 @@
 namespace App\Providers;
 
 use App\Domain\Auth\Models\SessionRecord;
+use App\Domain\Organizations\CurrentOrganization;
+use App\Domain\Organizations\Models\Invitation;
+use App\Domain\Organizations\Models\Member;
+use App\Domain\Organizations\Models\Organization;
+use App\Policies\InvitationPolicy;
+use App\Policies\MemberPolicy;
+use App\Policies\OrganizationPolicy;
 use App\Policies\SessionPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -19,7 +26,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Singleton, not a fresh instance per resolution: every
+        // OrganizationScope check within one request must see the same
+        // bound organization — see CurrentOrganization's docblock for why
+        // this is safe under standard php-fpm/CGI but not Octane as-is
+        // (MIGRATION_PLAN.md ADR-12).
+        $this->app->singleton(CurrentOrganization::class);
     }
 
     /**
@@ -59,8 +71,11 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Explicit registration, not relying on Laravel's naming-convention
-        // auto-discovery: SessionRecord lives under App\Domain\Auth\Models,
-        // not App\Models, which the default guesser doesn't check.
+        // auto-discovery: these all live under App\Domain\*\Models, not
+        // App\Models, which the default guesser doesn't check.
         Gate::policy(SessionRecord::class, SessionPolicy::class);
+        Gate::policy(Organization::class, OrganizationPolicy::class);
+        Gate::policy(Member::class, MemberPolicy::class);
+        Gate::policy(Invitation::class, InvitationPolicy::class);
     }
 }

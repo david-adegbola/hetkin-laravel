@@ -5,8 +5,17 @@ use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Audit\Services\AuditChainIntegrityChecker;
 use App\Domain\Audit\Services\AuditLogService;
+use App\Domain\Organizations\Models\Organization;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * organizationId defaults to null, not a placeholder string: since Stage 3
+ * added a real foreign key from audit_log_entries.organization_id to
+ * organizations.id (MIGRATION_PLAN.md ADR-25), any non-null value here has
+ * to reference a real row. Nothing in this file is testing organization
+ * scoping except the one test that says so in its name — that test creates
+ * real Organization rows instead of using this default.
+ */
 function makeAuditEvent(array $overrides = []): AuditEvent
 {
     return new AuditEvent(
@@ -15,7 +24,7 @@ function makeAuditEvent(array $overrides = []): AuditEvent
         action: $overrides['action'] ?? 'organization.note.created',
         entityType: $overrides['entityType'] ?? 'Organization',
         entityId: $overrides['entityId'] ?? 'org-1',
-        organizationId: $overrides['organizationId'] ?? 'org-1',
+        organizationId: $overrides['organizationId'] ?? null,
         metadata: $overrides['metadata'] ?? null,
     );
 }
@@ -41,11 +50,13 @@ test('each subsequent entry chains from the previous entry\'s hash', function ()
 
 test('the chain is global across organizations, not per-tenant', function () {
     $service = app(AuditLogService::class);
+    $orgA = Organization::factory()->create();
+    $orgB = Organization::factory()->create();
 
-    $orgA = DB::transaction(fn () => $service->record(makeAuditEvent(['organizationId' => 'org-a'])));
-    $orgB = DB::transaction(fn () => $service->record(makeAuditEvent(['organizationId' => 'org-b'])));
+    $entryA = DB::transaction(fn () => $service->record(makeAuditEvent(['organizationId' => $orgA->id])));
+    $entryB = DB::transaction(fn () => $service->record(makeAuditEvent(['organizationId' => $orgB->id])));
 
-    expect($orgB->previous_hash)->toBe($orgA->hash);
+    expect($entryB->previous_hash)->toBe($entryA->hash);
 });
 
 test('AuditLogEntry rows cannot be updated', function () {
