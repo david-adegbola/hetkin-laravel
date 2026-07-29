@@ -2,6 +2,7 @@ import { Logo } from '@/Components/Logo';
 import NavLink from '@/Components/portal/NavLink';
 import { InstallPwaButton } from '@/Components/pwa/InstallPwaButton';
 import { PwaUpdateBanner } from '@/Components/pwa/PwaUpdateBanner';
+import { buttonVariants } from '@/Components/ui/Button';
 import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
@@ -63,7 +64,7 @@ const LOGO_LINK_CLASSES =
  * unlike every portal route, isn't `base`-relative to begin with.
  */
 export default function PortalLayout({ children }: { children: ReactNode }) {
-    const { organization } = usePage<PageProps>().props;
+    const { organization, auth } = usePage<PageProps>().props;
     const base = usePortalBasePath();
     const homeHref = base || '/';
 
@@ -216,6 +217,27 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
                             {organization.process_type
                                 ? ` · ${PROCESS_TYPE_LABELS[organization.process_type]}`
                                 : ''}
+                        </div>
+                    )}
+                    {auth.user && (
+                        <div className="border-border flex items-center justify-between gap-2 border-t px-2 pt-3">
+                            <span
+                                className="text-text-secondary truncate text-xs"
+                                title={auth.user.email}
+                            >
+                                {auth.user.name}
+                            </span>
+                            <Link
+                                href={route('logout')}
+                                method="post"
+                                as="button"
+                                className={buttonVariants({
+                                    variant: 'ghost',
+                                    size: 'sm',
+                                })}
+                            >
+                                Sign out
+                            </Link>
                         </div>
                     )}
                 </div>

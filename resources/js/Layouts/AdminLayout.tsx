@@ -1,7 +1,7 @@
 import { Logo } from '@/Components/Logo';
 import { InstallPwaButton } from '@/Components/pwa/InstallPwaButton';
 import { PwaUpdateBanner } from '@/Components/pwa/PwaUpdateBanner';
-import { Button } from '@/Components/ui/Button';
+import { buttonVariants } from '@/Components/ui/Button';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
@@ -75,10 +75,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                             </strong>{' '}
                             · {ADMIN_ROLE_LABELS[admin.role] ?? admin.role}
                         </span>
-                        <Link href={`${base}/logout`} method="post" as="button">
-                            <Button variant="ghost" size="sm">
-                                Sign out
-                            </Button>
+                        <Link
+                            href={`${base}/logout`}
+                            method="post"
+                            as="button"
+                            className={buttonVariants({
+                                variant: 'ghost',
+                                size: 'sm',
+                            })}
+                        >
+                            Sign out
                         </Link>
                     </div>
                 )}

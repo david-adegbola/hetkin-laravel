@@ -79,6 +79,7 @@ review) — building it earlier would mean building it twice.
 | Platform audit: Labour Classification consistency | **Complete** | ADR-92..ADR-95. Marketing/docs copy corrected in 4 places; every Recommendation-derived surface confirmed already correct by construction. |
 | 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
 | 14. Progressive Web Application (PWA) | **Complete** | ADR-103..ADR-109. Customer portal and admin console each install as independent PWAs (own manifest/scope/icons/cache); hand-rolled classic-script Service Worker allow-lists only static assets, never protected content; install eligibility gated server-side (`PwaSurface`) and kept correct across in-app SPA navigation. Three bugs caught by design review before implementation, a fourth (SPA-navigation sync) found via live browser testing — see [PWA.md](PWA.md). |
+| Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110. User-raised question surfaced the customer portal had no sign-out link at all; added one, and live-testing it found the admin console's own "Sign out" had a pre-existing, unrelated nested-`<button>` bug that silently broke it too — both fixed. |
 
 ## Architecture Decisions
 
@@ -3191,6 +3192,47 @@ Service Worker registrations and caches are fully independent; the
 marketing site never links a manifest or registers a worker regardless
 of auth state; and, after ADR-107's fix, install eligibility tracks an
 in-app login/logout correctly without requiring a hard reload.
+
+---
+
+## Post-Stage-14: Customer portal had no sign-out control, and the admin console's was silently broken
+
+### ADR-110: A user-raised question ("how does a customer protect their account if they leave their PC unattended?") surfaced that `PortalLayout.tsx` had no sign-out link at all — and testing the fix found the admin console's had never actually worked
+
+Investigating the question directly (grepping `PortalLayout.tsx` for
+"sign out"/"logout") confirmed there was no visible way for a customer to
+end their own session — the `POST /logout` route existed and worked, it
+just wasn't linked from anywhere in the portal chrome. The only existing
+protections were `SESSION_LIFETIME=120` (a 2-hour idle timeout) and
+Settings → Security's active-session revocation, neither of which covers
+someone stepping away from a still-open, still-authenticated browser.
+
+Added a sign-out control to `PortalLayout.tsx`'s sidebar footer (name +
+"Sign out", visible whenever `auth.user` is present), mirroring
+`AdminLayout.tsx`'s existing nav-row pattern. Live-testing the new
+button in the browser found it didn't actually work — clicking did
+nothing, no navigation, no error surfaced to the user. The browser
+console showed why: `validateDOMNesting(...): <button> cannot appear as
+a descendant of <button>`. The pattern being mirrored —
+`<Link method="post" as="button"><Button>Sign out</Button></Link>` —
+renders Inertia's `Link` itself as a `<button>` and then nests a second,
+real `<button>` (from the `Button` component) inside it, which is
+invalid HTML and left the click not reliably reaching the outer
+element's handler.
+
+Checking `AdminLayout.tsx` found the exact same nested-button markup on
+its own "Sign out" control — a pre-existing bug, not something
+introduced by this change, that had evidently gone unnoticed. Fixed both
+by applying `buttonVariants({ variant: 'ghost', size: 'sm' })` (Button's
+own exported class-name function) directly to the `Link`'s `className`
+instead of nesting a second interactive element inside it — one real
+`<button>`, not two. Re-verified live in the browser: clicking "Sign
+out" on the customer portal now correctly signs out and lands on the
+customer sign-in page; the admin console's "Sign out" — broken before
+this fix, confirmed via the same nested-button check — now correctly
+signs out and lands on the admin sign-in page too.
+
+Full suite (527/527), Pint, PHPStan, and `tsc --noEmit` all stayed clean.
 
 ---
 
