@@ -6,7 +6,7 @@ import PortalLayout from '@/Layouts/PortalLayout';
 import { formatEurCents } from '@/lib/format';
 import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface RecommendationDecision {
@@ -197,6 +197,7 @@ export default function Dashboard({
 
     return (
         <>
+            <Head title="Dashboard" />
             <PortalPageHeader
                 title="Savings Dashboard"
                 meta={

@@ -9,7 +9,7 @@ import {
 import { FieldError, Input, Label } from '@/Components/ui/Input';
 import { PasswordInput } from '@/Components/ui/PasswordInput';
 import { PasswordStrengthMeter } from '@/Components/ui/PasswordStrengthMeter';
-import { useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 /**
@@ -38,6 +38,7 @@ export default function ResetPassword({
 
     return (
         <div className="bg-background flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+            <Head title="Reset password" />
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>

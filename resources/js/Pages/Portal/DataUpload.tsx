@@ -4,7 +4,7 @@ import { Card } from '@/Components/ui/Card';
 import { FieldError } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useRef } from 'react';
 
 interface UploadStatus {
@@ -39,6 +39,7 @@ export default function DataUpload({ status }: { status?: UploadStatus }) {
 
     return (
         <>
+            <Head title="Upload meter data" />
             <PortalPageHeader title="Upload meter data" />
             <Card className="max-w-lg">
                 <p className="text-text-secondary mb-4 text-sm">

@@ -3,6 +3,7 @@ import { Badge } from '@/Components/ui/Badge';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { formatEurCents } from '@/lib/format';
+import { Head } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface InvoiceRow {
@@ -37,6 +38,7 @@ export default function Billing({
 }) {
     return (
         <>
+            <Head title="Billing" />
             <PortalPageHeader title="Billing" />
             <div className="text-text-secondary mb-4 text-sm">
                 {pricing ? (

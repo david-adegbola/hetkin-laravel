@@ -6,7 +6,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { formatEurCents } from '@/lib/format';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
-import { Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ReactElement, useState } from 'react';
 
 interface InvoiceableRecord {
@@ -109,6 +109,7 @@ export default function Invoices({
 
     return (
         <div>
+            <Head title="Invoices" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Invoices

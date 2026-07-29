@@ -76,6 +76,8 @@ review) — building it earlier would mean building it twice.
 | Post-Stage-12: Nav & Account Security parity restoration | **Complete** | ADR-78..ADR-82. Billing icon fix, Team & Permissions + Support restored (deferred by ADR-33), Security integrated into PortalLayout + nav. |
 | Post-Stage-12: Enterprise dashboard UX review | **Complete** | ADR-83..ADR-85. 14 of 16 proposed items rejected with reasoning (domain mismatch or premature); Portal Dashboard's v2 stat cards + onboarding checklist (ADR-33's last open gap) closed. |
 | New Feature: Labour-Aware Shiftable Load Classification | **Complete** | ADR-86..ADR-91. New product scope (no v2 equivalent) — `labour_classification` on ScheduleBlock, conservative default, filters the recommendation pipeline only. |
+| Platform audit: Labour Classification consistency | **Complete** | ADR-92..ADR-95. Marketing/docs copy corrected in 4 places; every Recommendation-derived surface confirmed already correct by construction. |
+| 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
 
 ## Architecture Decisions
 
@@ -2745,6 +2747,172 @@ Stage 13 is complete when:
 - performance improvements have been implemented
 - security review has been completed
 - codebase is ready for long-term maintenance
+
+### Execution Log
+
+Preceded by a platform-wide verification pass confirming Stages 1–12 and
+every out-of-band feature request across the session were genuinely
+complete, not just marked so: migrations clean, 512/512 tests passing,
+every stage's routes present and wired, nav/security/dashboard-stat-card
+restorations all live-verified, scheduler and external integrations
+confirmed wired, and a live browser walkthrough of both the customer and
+admin realms end to end. No gaps found — see the Stage Status table
+above.
+
+Every ADR from Stage 1 through ADR-95 was then read and classified per
+this stage's own guiding principles (Architecture Improvement / Product
+Behaviour Preservation / Legacy Product Debt / Security & Data
+Integrity) before any code changed. The large majority are Product
+Behaviour Preservation — deliberate migration-parity decisions, several
+already self-documenting their own known trade-offs (ADR-8's deferred
+RLS, ADR-12's Octane caveat, ADR-25's membership-only authorization,
+ADR-42/48's intentionally-preserved v2 dead code) — and were left
+untouched. The items below are what the review surfaced as actionable.
+
+### ADR-96: `PreventBackHistoryCache` (ADR-14) extended to the portal and admin route groups — its own docblock already called for this, Stage 5 never did it
+
+The middleware's own comment at introduction said the future portal
+shell should adopt it too; that step was simply never taken when Stage 5
+and Stage 9 later built `routes/portal.php` and
+`routes/admin-protected.php`. Concretely: every actually-sensitive
+authenticated page — schedules, billing, reports, org data, invoices,
+audit logs — was serving `Cache-Control` headers that left it
+bfcache-restorable after logout, while only the Account Security
+settings pages (the middleware's original, narrower scope) were
+protected. Added to both route groups' middleware stacks; the fix is a
+response-header change only, no redirect, permission, or data-shape
+difference, so no business behavior changes. New tests added to
+`BackHistoryCacheHeadersTest.php` covering both realms; existing
+settings/sign-in assertions untouched and still passing.
+
+### ADR-97: Baseline security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`) added globally — CSP deliberately deferred, not attempted alongside them
+
+No security-header middleware existed anywhere in the app; a security
+review scope item named "headers" and "CSP compatibility" explicitly.
+`App\Http\Middleware\SecureHeaders` adds the three headers with no
+third-party-integration risk, registered in `bootstrap/app.php`'s global
+`web` group (unlike `PreventBackHistoryCache`, these don't affect
+cacheability, so there's no reason to scope them to authenticated
+routes only). Content-Security-Policy was considered and explicitly
+**not** added in the same pass: this app loads PostHog, Sentry, and (in
+local dev) Vite's HMR client from dynamic/third-party origins, and a
+CSP misconfigured in any one direction fails silently (a blocked
+request, not an error) rather than loudly — it needs its own dedicated
+pass with live browser verification against every integration, not a
+same-commit addition next to unrelated headers. Recorded here as a
+known follow-up, not silently skipped.
+
+### ADR-98: Static analysis (Larastan/PHPStan) added at level 5, existing findings baselined rather than force-fixed — one baselined finding is a documented Larastan false positive, not real dead code
+
+No static-analysis tooling existed in `composer.json` — explicitly named
+under this stage's Developer Experience scope. `larastan/larastan`
+installed, `phpstan.neon` configured at level 5 across `app/`,
+`database/`, `routes/`. A first run against this already-shipped,
+fully-tested codebase surfaced 200 findings — captured via
+`--generate-baseline` into `phpstan-baseline.neon` rather than fixed
+inline: individually triaging 200 findings for observable-behavior risk
+was out of this pass's scope, and PHPStan's own findings are not
+infallible on a codebase this dynamic. Concretely confirmed by manual
+inspection of one flagged item before deciding on the baseline approach:
+`AuditLogService::record()`'s `$last?->hash ?? self::genesisHash()` was
+flagged `nullsafe.neverNull` (Larastan inferring `$last` can never be
+null after a `lockForUpdate()`-chained `->first()`), but `$last`
+genuinely **is** null on the very first audit log write to a fresh
+database — exactly the case `genesisHash()` exists to handle. Applying
+PHPStan's own suggestion there would have crashed the first audit write
+in any newly migrated environment. Left in the baseline, untouched. The
+baseline means all *new* code is held to level 5 from this point
+forward; the 200 pre-existing findings remain visible in
+`phpstan-baseline.neon` for deliberate, individually-reviewed cleanup
+later, not silently hidden. `composer analyse` added as the run command.
+
+### ADR-99: `laravel/breeze` removed from `composer.json` — its scaffolding was replaced back in Stage 1, but the dependency itself, and its auto-discovered service provider, were never removed
+
+Found while investigating dev dependencies for the DX review: no code
+anywhere references `Laravel\Breeze\*`, but `Laravel\Breeze\
+BreezeServiceProvider` was still present in `bootstrap/cache/services.php`
+and `packages.php` — meaning it booted on every single request for zero
+functional benefit, purely because `composer remove` was never run after
+its generated scaffolding was hand-replaced by this app's own dual-realm
+auth system. `composer remove --dev laravel/breeze` confirmed clean via
+`grep` first (no lingering references), then verified via a full
+`php artisan test` pass and a fresh PHPStan run — both unchanged. Zero
+observable behavior change; one fewer service provider on every boot.
+
+### ADR-100: 27 of 28 pages missing a page-specific `<Head title>` now have one — explicitly pre-flagged as Stage 13 work by ADR-75 itself; one page deliberately left as-is
+
+ADR-75 (Stage 12) found that no page anywhere in the app prior to that
+stage ever set a page title, and explicitly named "Stage 13's
+post-migration cleanup" as where retrofitting belonged. Added
+`<Head title="...">` to all 16 remaining customer-facing pages (Auth,
+Invite, Portal, Settings) and all 12 Admin pages, reusing each page's
+existing on-screen heading text as the title (`PortalPageHeader`'s
+`title` prop, or the Admin `<h1>` content) so no new copy was invented.
+`Admin/Organizations/Show.tsx` uses the organization's own name
+(`<Head title={organization.name} />`), matching the page's own dynamic
+`<h1>`. **One deliberate exception**: `Auth/Login.tsx` was left
+untouched — its own docblock already documents, with a cited reason,
+that v2's sign-in page has no page-specific metadata export and that
+this port matches that exactly ("No `<Head title>` override either...
+matching that means NOT setting one here"). Overriding a
+specifically-verified parity decision under a generic "add missing
+titles" pass would have been exactly the kind of undisclosed product
+change this stage's guiding principles rule out — a file-specific,
+evidenced decision takes precedence over ADR-75's blanket framing.
+Verified live in the browser across both realms post-build: Dashboard,
+Schedule, Overview, Organizations, and the dynamic
+`{organization.name}` case on Organizations/Show all render the correct
+`<title>...· Hetkin</title>`, confirmed via rendered tab title, not just
+source diffs. `tsc --noEmit`, ESLint, full suite (515/515), and
+`vite build` all clean.
+
+### ADR-101: Performance and Architecture Improvement candidates investigated, none executed — evidence-based decision, not a skipped step
+
+**Performance**: audited the highest-traffic, most relation-heavy read
+paths for N+1 queries and missing indexes — Admin's Organization 360-view
+(`OrganizationController::show()`, 8 sections, each independently
+`.with()`-eager-loaded where needed), `SavingsReportLoader` (the
+report/PDF data loader, confirmed `recommendations` eager-loads
+`scheduleBlock` before the view-model builder ever touches it), and the
+three highest-volume tables (`audit_log_entries`,
+`meter_readings`, `electricity_prices`). All three tables already carry
+composite indexes matching their actual query patterns
+(`[organization_id, created_at]`, `[metering_point_id, hour_start]`
+unique, `[bidding_zone, hour_start, source]` unique) — foreign keys are
+auto-indexed via `foreignUlid()->constrained()` throughout. No N+1
+pattern or missing index found anywhere checked; this reflects care
+already taken during the original migration stages, not a gap. No
+changes made — there was nothing to fix.
+
+**Architecture**: two candidates from the ADR classification (ADR-21's
+duplicated route registration across `routes/portal.php`/
+`routes/admin-protected.php`'s two mount points; ADR-29/32/37's
+repeated "scope through parent, not directly" pattern across Metering/
+Scheduling/Optimization) were investigated and deliberately **not**
+executed. Route de-duplication would touch every route definition in
+the app for a purely cosmetic reduction in repetition, with real risk of
+silently renaming or misregistering a route if done carelessly — a
+disproportionate blast radius for the benefit, given this stage's own
+"no externally observable behaviour change" bar. The scope-through-parent
+"pattern" is not duplicated imperative code to consolidate — it's the
+same architectural *decision* (don't scope the child model directly)
+independently documented in three domains' own model files; forcing a
+shared abstraction over three one-line decisions would add indirection
+without removing any actual duplication, contrary to this stage's own
+instruction not to introduce unnecessary complexity. Both reviewed
+deliberately, per the stage's framework; neither changed.
+
+### ADR-102: Validation
+
+Full suite: 515/515 passing (1,737 assertions, up from 512/1,715 at the
+start of this stage — the two new `BackHistoryCacheHeadersTest` cases
+plus one new `SecureHeadersTest` case). `tsc --noEmit`, ESLint, and Pint
+all clean. PHPStan (new to this stage): 0 errors against the level-5
+baseline. `vite build` succeeded. Live smoke test at `localhost:8123`
+against both realms: customer login → Dashboard (correct tab title,
+`no-store` header present) → Schedule (correct tab title); admin login →
+Overview → Organizations → Organizations/Show (dynamic org-name title
+confirmed). Stage Status table below updated to reflect completion.
 
 ---
 

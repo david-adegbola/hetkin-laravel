@@ -4,7 +4,7 @@ import { buttonVariants } from '@/Components/ui/Button';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { Link } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface MeteringPointRow {
@@ -26,6 +26,7 @@ export default function Data({
 
     return (
         <>
+            <Head title="Data" />
             <PortalPageHeader title="Data" />
             <div className="mb-4">
                 <Link

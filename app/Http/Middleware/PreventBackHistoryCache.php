@@ -10,11 +10,11 @@ use Symfony\Component\HttpFoundation\Response;
  * Prevents authenticated pages from being restorable after logout via the
  * browser's back-forward cache (bfcache) or regular HTTP cache — see
  * MIGRATION_PLAN.md ADR-14 for the full root-cause analysis. Applied ONLY
- * to authenticated route groups (routes/settings.php today; the future
- * portal shell in Stage 5 adopts it too), never globally — marketing
- * pages, docs, and static assets must stay cacheable, which is exactly why
- * this is middleware scoped to a route group rather than a blanket
- * response header set in bootstrap/app.php.
+ * to authenticated route groups (routes/settings.php, routes/portal.php,
+ * routes/admin-protected.php), never globally — marketing pages, docs, and
+ * static assets must stay cacheable, which is exactly why this is
+ * middleware scoped to a route group rather than a blanket response header
+ * set in bootstrap/app.php.
  *
  * `no-store` is the directive that actually disqualifies a response from
  * bfcache in modern browsers (Chrome, Firefox, Safari all key off it) —

@@ -7,7 +7,7 @@ import {
 } from '@/Components/ui/Card';
 import { FieldError, Input, Label } from '@/Components/ui/Input';
 import { PasswordInput } from '@/Components/ui/PasswordInput';
-import { useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 interface InvitationSummary {
@@ -42,6 +42,7 @@ export default function Accept({
 
     return (
         <div className="bg-background flex min-h-screen items-center justify-center p-6">
+            <Head title="Accept invitation" />
             <Card className="w-full max-w-sm">
                 {invalidReason || !invitation ? (
                     <>

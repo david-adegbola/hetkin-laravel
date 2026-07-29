@@ -2,6 +2,7 @@ import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
+import { Head } from '@inertiajs/react';
 import { ReactElement, ReactNode } from 'react';
 
 interface Kpi {
@@ -256,6 +257,7 @@ export default function ReportDetail({
 
     return (
         <>
+            <Head title={vm.cover.report_title} />
             <PortalPageHeader
                 title={vm.cover.report_title}
                 meta={`${vm.cover.organization_name} · ${vm.cover.period_label}`}

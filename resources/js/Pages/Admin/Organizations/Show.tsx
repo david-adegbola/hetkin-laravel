@@ -12,7 +12,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { formatEurCents } from '@/lib/format';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { AdminRole, PageProps } from '@/types';
-import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface OrganizationDetail {
@@ -148,6 +148,7 @@ export default function Show({
 
     return (
         <div>
+            <Head title={organization.name} />
             <div className="mb-6 flex items-center justify-between">
                 <div>
                     <h1 className="font-display text-primary text-xl font-semibold">

@@ -8,7 +8,7 @@ import {
 } from '@/Components/ui/Card';
 import { FieldError, Label } from '@/Components/ui/Input';
 import { PasswordInput } from '@/Components/ui/PasswordInput';
-import { useForm } from '@inertiajs/react';
+import { Head, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 /**
@@ -31,6 +31,7 @@ export default function ConfirmPassword() {
 
     return (
         <div className="bg-background flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+            <Head title="Confirm password" />
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>

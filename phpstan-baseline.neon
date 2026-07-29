@@ -1,0 +1,817 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \#3 \$createdAt of method App\\Domain\\Audit\\Services\\AuditLogService\:\:computeHash\(\) expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Audit/Services/AuditChainIntegrityChecker.php
+
+		-
+			message: '#^Parameter \$actorType of class App\\Domain\\Audit\\DTOs\\AuditEvent constructor expects App\\Domain\\Audit\\Enums\\AuditActorType, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Audit/Services/AuditChainIntegrityChecker.php
+
+		-
+			message: '#^Parameter \$metadata of class App\\Domain\\Audit\\DTOs\\AuditEvent constructor expects array\<string, mixed\>\|null, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Audit/Services/AuditChainIntegrityChecker.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>hash" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Domain/Audit/Services/AuditLogService.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domain/Auth/Actions/ChangeAdminRoleAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between App\\Domain\\Auth\\Enums\\AdminRole and string will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Auth/Actions/ChangeAdminRoleAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\ApproveLiveAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/ApproveLiveAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:ShadowConfirmed will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/ApproveLiveAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/ApproveLiveAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\ConfirmShadowReviewAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/ConfirmShadowReviewAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:ShadowPendingReview will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/ConfirmShadowReviewAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/ConfirmShadowReviewAction.php
+
+		-
+			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:LiveApproved, App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:Disputed\} and true will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Domain/Billing/Actions/DisputeRecordAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\GenerateInvoiceAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/GenerateInvoiceAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:LiveApproved will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/GenerateInvoiceAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/GenerateInvoiceAction.php
+
+		-
+			message: '#^Parameter \#1 \$hourStart of class App\\Domain\\Billing\\DTOs\\MeterReadingPoint constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Actions/GenerateSavingsAssessmentAction.php
+
+		-
+			message: '#^Parameter \#1 \$hourStart of class App\\Domain\\Billing\\DTOs\\PricePoint constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Actions/GenerateSavingsAssessmentAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\IssueInvoiceAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/IssueInvoiceAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\IssueInvoiceAction\:\:\$postHog is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/IssueInvoiceAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\InvoiceStatus\:\:Draft will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/IssueInvoiceAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/IssueInvoiceAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Domain\\Billing\\Enums\\BaselineStatus\:\:Locked will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Billing/Actions/LockBaselineAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\MarkInvoicePaidAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/MarkInvoicePaidAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\InvoiceStatus\:\:Issued will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/MarkInvoicePaidAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/MarkInvoicePaidAction.php
+
+		-
+			message: '#^Property App\\Domain\\Billing\\Actions\\ReopenDisputedAction\:\:\$auditLogService is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Domain/Billing/Actions/ReopenDisputedAction.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between string and App\\Domain\\Billing\\Enums\\VerificationReviewStatus\:\:Disputed will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Domain/Billing/Actions/ReopenDisputedAction.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 1
+			path: app/Domain/Billing/Actions/ReopenDisputedAction.php
+
+		-
+			message: '#^Parameter \#1 \$hourStart of class App\\Domain\\Billing\\DTOs\\MeterReadingPoint constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Actions/RunVerificationAction.php
+
+		-
+			message: '#^Parameter \#1 \$hourStart of class App\\Domain\\Billing\\DTOs\\PricePoint constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Actions/RunVerificationAction.php
+
+		-
+			message: '#^Call to function in_array\(\) with arguments string, array\{App\\Domain\\Billing\\Enums\\InvoiceStatus\:\:Paid, App\\Domain\\Billing\\Enums\\InvoiceStatus\:\:Void\} and true will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Domain/Billing/Actions/VoidInvoiceAction.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Cannot call method copy\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Cannot call method diffInSeconds\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Cannot call method format\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Cannot call method label\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Domain\\Metering\\Models\\MeteringPoint\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Domain\\Optimization\\Models\\Recommendation\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$key of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:titleCase\(\) expects string, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$start of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:formatDateRange\(\) expects Illuminate\\Support\\Carbon\|null, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$startAt of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:toBar\(\) expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$value of function collect contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#2 \$end of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:formatDateRange\(\) expects Illuminate\\Support\\Carbon\|null, string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Parameter \#2 \$endAt of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:toBar\(\) expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 0 and ''note'' will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>asset_label" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 2
+			path: app/Domain/Optimization/Actions/ApplyDecisionsToNewScheduleVersionAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Domain\\Optimization\\Enums\\RecommendationDecisionType\:\:Accepted will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Optimization/Actions/ApplyDecisionsToNewScheduleVersionAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Domain\\Optimization\\Enums\\RecommendationDecisionType\:\:Partial will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Optimization/Actions/ApplyDecisionsToNewScheduleVersionAction.php
+
+		-
+			message: '#^Cannot call method copy\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Optimization/Actions/RunOptimizationAction.php
+
+		-
+			message: '#^Parameter \$endAt of class App\\Domain\\Optimization\\DTOs\\ScheduleBlockInput constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Optimization/Actions/RunOptimizationAction.php
+
+		-
+			message: '#^Parameter \$hourStart of class App\\Domain\\Optimization\\DTOs\\PricePoint constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Optimization/Actions/RunOptimizationAction.php
+
+		-
+			message: '#^Parameter \$startAt of class App\\Domain\\Optimization\\DTOs\\ScheduleBlockInput constructor expects Illuminate\\Support\\Carbon, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Domain/Optimization/Actions/RunOptimizationAction.php
+
+		-
+			message: '#^Cannot call method isPast\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Organizations/Actions/AcceptInvitationAction.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domain/Organizations/Actions/RemoveMemberAction.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domain/Organizations/Actions/UpdateMemberRoleAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between App\\Domain\\Organizations\\Enums\\OrgRole and string will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Organizations/Actions/UpdateMemberRoleAction.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domain/Organizations/Actions/UpdateOrganizationStatusAction.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between App\\Domain\\Organizations\\Enums\\OrganizationStatus and string will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Organizations/Actions/UpdateOrganizationStatusAction.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Domain/Pilots/Actions/ApprovePilotApplicationAction.php
+
+		-
+			message: '#^Cannot call method toDateString\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Domain/Pricing/Actions/BackfillPricesAction.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/Domain/Scheduling/Models/ScheduleBlock.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Domain\\Scheduling\\Enums\\LabourClassification\:\:Unmanned will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Domain/Scheduling/Models/ScheduleBlock.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Audit\\Models\\AuditLogEntry\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/AuditLogController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/BaselineController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/BaselineController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\Baseline\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/BaselineController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/DashboardController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\),App\\Domain\\Jobs\\Models\\JobRun\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/DashboardController.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between string and App\\Domain\\Jobs\\Enums\\JobRunStatus\:\:Failed will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Http/Controllers/Admin/DashboardController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/InvoiceController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 7
+			path: app/Http/Controllers/Admin/InvoiceController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\Invoice\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/InvoiceController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\VerificationRecord\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/InvoiceController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/JobController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Http/Controllers/Admin/JobController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 12
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 11
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Alerts\\Models\\Alert\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Audit\\Models\\AuditLogEntry\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\Baseline\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\Invoice\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\VerificationRecord\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\Invitation\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\Member\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\Organization\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\OrganizationNote\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/OrganizationController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Controllers/Admin/PilotApplicationController.php
+
+		-
+			message: '#^Cannot call method label\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/PilotApplicationController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/PilotApplicationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Pilots\\Models\\PilotApplication\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/PilotApplicationController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/TeamController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\AdminUser\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/TeamController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Admin/VerificationController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: app/Http/Controllers/Admin/VerificationController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\VerificationRecord\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Admin/VerificationController.php
+
+		-
+			message: '#^Cannot call method isPast\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/InvitationController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Portal/BillingController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Portal/BillingController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\Invoice\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/BillingController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: app/Http/Controllers/Portal/DashboardController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 4
+			path: app/Http/Controllers/Portal/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Alerts\\Models\\Alert\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Optimization\\Models\\Recommendation\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/DashboardController.php
+
+		-
+			message: '#^Anonymous function should return Illuminate\\Support\\Collection\<int, array\{id\: mixed, label\: mixed, site_name\: string, data_source\: mixed, connection_healthy\: mixed, last_reading_at\: mixed\}\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, label\: mixed, site_name\: string, data_source\: mixed, connection_healthy\: mixed, last_reading_at\: mixed\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Portal/DataController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Portal/DataController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Portal/DataController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Metering\\Models\\MeteringPoint\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/DataController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: app/Http/Controllers/Portal/ReportController.php
+
+		-
+			message: '#^Cannot call method format\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Portal/ReportController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: app/Http/Controllers/Portal/ReportController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\SavingsAssessment\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/ReportController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Billing\\Models\\VerificationRecord\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/ReportController.php
+
+		-
+			message: '#^Anonymous function should return array\{id\: string, version\: int\<0, max\>, status\: mixed, created_at\: mixed, submitted_by\: string\|null, blocks\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, site_name\: mixed, asset_label\: mixed, start_at\: mixed, end_at\: mixed, estimated_kwh\: float\|null, labour_classification\: mixed\}\>\} but returns array\{id\: string, version\: int\<0, max\>, status\: mixed, created_at\: mixed, submitted_by\: string\|null, blocks\: Illuminate\\Support\\Collection\<int, array\{id\: string, site_name\: mixed, asset_label\: mixed, start_at\: mixed, end_at\: mixed, estimated_kwh\: float\|null, labour_classification\: mixed\}\>\}\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Scheduling\\Models\\ProductionSchedule\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Scheduling\\Models\\ProductionSchedule\>\:\:map\(\) expects callable\(App\\Domain\\Scheduling\\Models\\ProductionSchedule, int\)\: array\{id\: string, version\: int\<0, max\>, status\: mixed, created_at\: mixed, submitted_by\: string\|null, blocks\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, site_name\: mixed, asset_label\: mixed, start_at\: mixed, end_at\: mixed, estimated_kwh\: float\|null, labour_classification\: mixed\}\>\}, Closure\(App\\Domain\\Scheduling\\Models\\ProductionSchedule\)\: array\{id\: string, version\: int\<0, max\>, status\: mixed, created_at\: mixed, submitted_by\: string\|null, blocks\: Illuminate\\Support\\Collection\<int, array\{id\: mixed, site_name\: mixed, asset_label\: mixed, start_at\: mixed, end_at\: mixed, estimated_kwh\: float\|null, labour_classification\: mixed\}\>\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Scheduling\\Models\\ScheduleBlock\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 2
+			path: app/Http/Controllers/Portal/ScheduleController.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Controllers/Portal/TeamController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\Invitation\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/TeamController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Domain\\Organizations\\Models\\Member\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Portal/TeamController.php
+
+		-
+			message: '#^Cannot call method diffInDays\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Settings/SecurityController.php
+
+		-
+			message: '#^Cannot call method toIso8601String\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Http/Controllers/Settings/SecurityController.php
+
+		-
+			message: '#^Call to function abort_unless\(\) with false and 403 will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Middleware/EnsureAdminRole.php
+
+		-
+			message: '#^Call to function in_array\(\) with arguments string, array\<int\<0, max\>\|string, App\\Domain\\Auth\\Enums\\AdminRole\> and true will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Http/Middleware/EnsureAdminRole.php
+
+		-
+			message: '#^Result of && is always false\.$#'
+			identifier: booleanAnd.alwaysFalse
+			count: 1
+			path: app/Http/Middleware/EnsureAdminRole.php
+
+		-
+			message: '#^Cannot access property \$value on string\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Middleware/ResolveOrganizationContext.php
+
+		-
+			message: '#^Parameter \#1 \$class of method Illuminate\\Database\\Eloquent\\Relations\\BelongsToMany\<App\\Domain\\Organizations\\Models\\Organization,\$this\(App\\Models\\User\),Illuminate\\Database\\Eloquent\\Relations\\Pivot,string\>\:\:using\(\) expects class\-string\<Illuminate\\Database\\Eloquent\\Relations\\Pivot\>, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Cannot call method format\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Notifications/InvitationResent.php
+
+		-
+			message: '#^Cannot call method isFuture\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Notifications/InvitationResent.php
+
+		-
+			message: '#^Cannot call method label\(\) on string\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Notifications/PilotApplicationSubmitted.php

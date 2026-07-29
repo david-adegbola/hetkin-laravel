@@ -5,7 +5,7 @@ import { FieldError, Input, Label, Select } from '@/Components/ui/Input';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
-import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface AdminRow {
@@ -135,6 +135,7 @@ export default function Team({ admins }: { admins: AdminRow[] }) {
 
     return (
         <div>
+            <Head title="Team" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Team

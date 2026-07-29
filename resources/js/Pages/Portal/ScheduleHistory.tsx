@@ -2,6 +2,7 @@ import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Badge } from '@/Components/ui/Badge';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
+import { Head } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 type LabourClassification = 'UNMANNED' | 'LABOUR_BOUND';
@@ -51,6 +52,7 @@ export default function ScheduleHistory({
 }) {
     return (
         <>
+            <Head title="Schedule history" />
             <PortalPageHeader
                 title="Schedule history"
                 meta="Every version is kept — none are edited or deleted in place."

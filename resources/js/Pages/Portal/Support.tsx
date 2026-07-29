@@ -1,6 +1,7 @@
 import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
+import { Head } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 /**
@@ -10,6 +11,7 @@ import { ReactElement } from 'react';
 export default function Support() {
     return (
         <>
+            <Head title="Support" />
             <PortalPageHeader title="Support" />
             <Card>
                 <p className="text-text-secondary text-sm">

@@ -7,7 +7,7 @@ import {
     CardTitle,
 } from '@/Components/ui/Card';
 import { FieldError, Input, Label } from '@/Components/ui/Input';
-import { Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 /**
@@ -29,6 +29,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
 
     return (
         <div className="bg-background flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+            <Head title="Forgot password" />
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>

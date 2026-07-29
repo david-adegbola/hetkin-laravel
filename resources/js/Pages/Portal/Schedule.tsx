@@ -5,7 +5,7 @@ import { Card } from '@/Components/ui/Card';
 import { FieldError, Input, Label, Select } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 type LabourClassification = 'UNMANNED' | 'LABOUR_BOUND';
@@ -263,6 +263,7 @@ export default function Schedule({
 
     return (
         <>
+            <Head title="Schedule" />
             <PortalPageHeader title="Schedule" />
             <Card className="mb-4">
                 <h3 className="font-display text-primary mb-3 text-base font-semibold">

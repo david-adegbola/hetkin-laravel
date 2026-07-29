@@ -6,7 +6,7 @@ import { FieldError } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { formatEurCents } from '@/lib/format';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { Link, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { ReactElement, useState } from 'react';
 
 interface AssessmentRow {
@@ -74,6 +74,7 @@ export default function Reports({
 
     return (
         <>
+            <Head title="Reports" />
             <PortalPageHeader title="Reports" />
 
             <div className="mb-8">

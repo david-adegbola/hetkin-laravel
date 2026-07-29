@@ -1,16 +1,17 @@
 <?php
 
+use App\Domain\Organizations\CurrentOrganization;
+use App\Models\AdminUser;
+
 /**
- * See MIGRATION_PLAN.md ADR-14. Confirms App\Http\Middleware\
- * PreventBackHistoryCache is scoped correctly: present on authenticated
- * settings routes, absent from the public sign-in page — a global
- * middleware would fail the second half of this file.
+ * See MIGRATION_PLAN.md ADR-14 and its Stage 13 follow-up. Confirms
+ * App\Http\Middleware\PreventBackHistoryCache is scoped correctly:
+ * present on every authenticated route group (settings, portal, admin),
+ * absent from public pages — a global middleware would fail the last two
+ * assertions below.
  */
-test('an authenticated settings response carries no-store cache headers', function () {
-    confirmedPasswordUser();
-
-    $response = $this->get(route('settings.security'));
-
+function assertNoStoreHeaders($response): void
+{
     // Not an exact-string match: Symfony's ResponseHeaderBag alphabetizes
     // Cache-Control directives when it serializes the header, regardless
     // of the order App\Http\Middleware\PreventBackHistoryCache set them in.
@@ -21,6 +22,25 @@ test('an authenticated settings response carries no-store cache headers', functi
     expect($cacheControl)->toContain('private');
     $response->assertHeader('Pragma', 'no-cache');
     $response->assertHeader('Expires', '0');
+}
+
+test('an authenticated settings response carries no-store cache headers', function () {
+    confirmedPasswordUser();
+
+    assertNoStoreHeaders($this->get(route('settings.security')));
+});
+
+test('an authenticated portal response carries no-store cache headers', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+
+    assertNoStoreHeaders($this->actingAs($user, 'web')->get(route('dashboard')));
+});
+
+test('an authenticated admin response carries no-store cache headers', function () {
+    $admin = AdminUser::factory()->create();
+
+    assertNoStoreHeaders($this->actingAs($admin, 'admin')->get(route('admin.overview')));
 });
 
 test('the public sign-in page does not carry the no-store cache headers', function () {

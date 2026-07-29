@@ -3,7 +3,7 @@ import { Card, CardTitle } from '@/Components/ui/Card';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { formatEurCents } from '@/lib/format';
 import { useAdminBasePath } from '@/lib/subdomain';
-import { Link } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { ReactElement, ReactNode } from 'react';
 
 interface AuditChain {
@@ -103,6 +103,7 @@ export default function Overview({
 
     return (
         <div>
+            <Head title="Overview" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Overview

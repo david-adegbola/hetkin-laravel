@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\OrganizationController;
 use App\Http\Controllers\Admin\PilotApplicationController;
 use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\VerificationController;
+use App\Http\Middleware\PreventBackHistoryCache;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -46,7 +47,13 @@ return function (): void {
         // docblock. Deliberately excludes the logout route above: a
         // deactivated admin must still be able to end their own session
         // cleanly rather than being 403'd trying to log out.
-        Route::middleware('admin.active')->group(function () {
+        //
+        // PreventBackHistoryCache (ADR-14) added here in Stage 13, same
+        // gap and same fix as routes/portal.php: the admin console reads
+        // cross-tenant organization data, invoices, and audit logs — the
+        // bfcache-restoration risk the middleware exists for applies at
+        // least as much here as it does to the customer portal.
+        Route::middleware(['admin.active', PreventBackHistoryCache::class])->group(function () {
             // Deliberately NOT registered at bare '/' — on the admin
             // subdomain, bare '/' is already claimed by
             // routes/domains.php's `admin.subdomain.home` (always the

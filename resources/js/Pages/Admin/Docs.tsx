@@ -1,5 +1,6 @@
 import { Badge } from '@/Components/ui/Badge';
 import AdminLayout from '@/Layouts/AdminLayout';
+import { Head } from '@inertiajs/react';
 import { ReactElement, ReactNode } from 'react';
 
 /**
@@ -400,6 +401,7 @@ const TOC = [
 export default function Docs() {
     return (
         <div className="mx-auto max-w-[900px]">
+            <Head title="Staff guide" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Staff guide

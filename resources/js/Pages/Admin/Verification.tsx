@@ -3,7 +3,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { formatEurCents } from '@/lib/format';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { AdminRole, PageProps } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface VerificationRow {
@@ -154,6 +154,7 @@ export default function Verification({
 
     return (
         <div>
+            <Head title="Verification" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Verification

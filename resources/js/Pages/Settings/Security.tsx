@@ -13,7 +13,7 @@ import { FieldError, Label } from '@/Components/ui/Input';
 import { PasswordInput } from '@/Components/ui/PasswordInput';
 import { PasswordStrengthMeter } from '@/Components/ui/PasswordStrengthMeter';
 import PortalLayout from '@/Layouts/PortalLayout';
-import { router, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface SessionRow {
@@ -54,6 +54,7 @@ export default function Security({
 }: SecurityPageProps) {
     return (
         <>
+            <Head title="Security" />
             <PortalPageHeader title="Security" />
             <div className="flex flex-col gap-6">
                 <SecurityRecommendations

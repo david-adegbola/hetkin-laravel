@@ -3,7 +3,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { formatEurCents } from '@/lib/format';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { AdminRole, PageProps } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface BaselineRow {
@@ -32,6 +32,7 @@ export default function Baselines({ baselines }: { baselines: BaselineRow[] }) {
 
     return (
         <div>
+            <Head title="Baselines" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Baselines

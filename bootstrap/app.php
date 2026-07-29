@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureAdminActive;
 use App\Http\Middleware\EnsureAdminRole;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveOrganizationContext;
+use App\Http\Middleware\SecureHeaders;
 use App\Http\Middleware\UseSessionRealm;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            SecureHeaders::class,
         ]);
 
         // Trust every proxy's X-Forwarded-* headers — this app is never

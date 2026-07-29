@@ -5,7 +5,7 @@ import { FieldError, Input, Label } from '@/Components/ui/Input';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
-import { router, useForm, usePage } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface JobRun {
@@ -218,6 +218,7 @@ export default function Jobs({
 
     return (
         <div>
+            <Head title="Jobs" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Jobs

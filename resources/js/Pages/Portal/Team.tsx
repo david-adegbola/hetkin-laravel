@@ -2,6 +2,7 @@ import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Badge } from '@/Components/ui/Badge';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
+import { Head } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface MemberRow {
@@ -32,6 +33,7 @@ export default function Team({
 }) {
     return (
         <>
+            <Head title="Team & Permissions" />
             <PortalPageHeader title="Team & Permissions" />
             <Card>
                 <table className="w-full text-left text-sm">

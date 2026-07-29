@@ -8,6 +8,7 @@ use App\Http\Controllers\Portal\ReportController;
 use App\Http\Controllers\Portal\ScheduleController;
 use App\Http\Controllers\Portal\SupportController;
 use App\Http\Controllers\Portal\TeamController;
+use App\Http\Middleware\PreventBackHistoryCache;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -38,9 +39,17 @@ use Illuminate\Support\Facades\Route;
  * Team/Support) now has a real route here — Team and Support were the
  * last two, restored per MIGRATION_PLAN.md's post-Stage-12 ADR after
  * Stage 5's ADR-33 deliberately deferred them.
+ *
+ * `PreventBackHistoryCache` (ADR-14) was scoped only to routes/settings.php
+ * at launch — its own docblock always said the portal shell should adopt
+ * it too once Stage 5 built it, but that step was never actually taken.
+ * Added here in Stage 13 (MIGRATION_PLAN.md's technical-modernization
+ * ADR) as the security fix that closes that gap: this is exactly the
+ * sensitive, session-scoped content bfcache restoration was meant to
+ * protect.
  */
 return function (): void {
-    Route::middleware(['auth:web', 'organization.context'])->group(function () {
+    Route::middleware(['auth:web', 'organization.context', PreventBackHistoryCache::class])->group(function () {
         Route::get('/', [DashboardController::class, 'show'])->name('dashboard');
 
         Route::get('data', [DataController::class, 'index'])->name('data');

@@ -1,7 +1,7 @@
 import { Badge } from '@/Components/ui/Badge';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useAdminBasePath } from '@/lib/subdomain';
-import { Link } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
 interface PilotApplicationRow {
@@ -69,6 +69,7 @@ export default function Pilots({
 
     return (
         <div>
+            <Head title="Pilot Applications" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Pilot Applications

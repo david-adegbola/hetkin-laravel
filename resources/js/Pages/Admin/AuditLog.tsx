@@ -4,7 +4,7 @@ import { Card } from '@/Components/ui/Card';
 import { Input, Label, Select } from '@/Components/ui/Input';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useAdminBasePath } from '@/lib/subdomain';
-import { Link, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface AuditEntry {
@@ -72,6 +72,7 @@ export default function AuditLog({
 
     return (
         <div>
+            <Head title="Audit Log" />
             <div className="mb-6">
                 <h1 className="font-display text-primary text-xl font-semibold">
                     Audit Log
