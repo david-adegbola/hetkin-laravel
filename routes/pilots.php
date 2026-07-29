@@ -3,6 +3,7 @@
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\PilotApplicationController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 /**
  * The pilot funnel's two public-facing surfaces — mirrors the Next.js
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Route;
  * matching v2's in-memory limiter exactly).
  */
 Route::prefix('pilot-program')->group(function () {
+    Route::get('/', fn () => Inertia::render('PilotProgram/Index'))->name('pilot-program.index');
     Route::get('apply', [PilotApplicationController::class, 'create'])->name('pilot-program.apply');
     Route::post('apply', [PilotApplicationController::class, 'store'])
         ->middleware('throttle:pilot-application')

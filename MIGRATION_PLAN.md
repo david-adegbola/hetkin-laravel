@@ -72,7 +72,7 @@ review) — building it earlier would mean building it twice.
 | 9. Admin Console | **Complete** | ADR-51..ADR-57 |
 | 10. Background Jobs & Scheduler | **Complete** | ADR-58..ADR-63 |
 | 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | **Complete** | ADR-64..ADR-69. ENTSO-E itself was pulled forward into Stage 10. |
-| 12. Marketing site + SEO/OG parity | Not started | |
+| 12. Marketing site + SEO/OG parity | **Complete** | ADR-70..ADR-77 |
 
 ## Architecture Decisions
 
@@ -1926,6 +1926,136 @@ injection, so safely forcing one from outside the app wasn't practical;
 its logic was reviewed directly instead. Test data (including the two
 smoke-test admin/pilot rows and the stray queued job) was cleared via a
 second `migrate:fresh` immediately after.
+
+---
+
+## Stage 12: Marketing Site + SEO/OG Parity
+
+### ADR-70: The marketing site is closure routes rendering static Inertia pages, not a controller per page — same precedent as `Admin/Docs.tsx`
+
+v2's marketing site (`src/app/{page,pricing,faq,how-it-works,trust,
+methodology,beta,docs}/page.tsx`, `src/app/legal/*`,
+`src/app/pilot-program/page.tsx`) is entirely static content — no page
+reads from a model or accepts route parameters. `routes/marketing.php`
+registers each as a one-line `Route::get(...)->name(...)` closure calling
+`Inertia::render(...)`, the same pattern already established for
+`Admin/Docs.tsx` in `routes/admin-protected.php`. A controller class per
+page would be pure ceremony here: nothing to inject, nothing to
+authorize, nothing to validate. The one exception is the pilot-program
+landing page (`PilotProgram/Index.tsx`), registered in `routes/pilots.php`
+alongside the existing `pilot-program.apply` controller routes rather
+than in `routes/marketing.php`, keeping the whole `pilot-program/*` URL
+family in one file. `routes/web.php` no longer needs its Stage-1-era
+`TODO(Stage 12 — Marketing site)` comment reserving `'/'` — that
+placeholder is now `home`.
+
+### ADR-71: Every new page ports v2's exact Tailwind class names verbatim, including two of v2's own undefined/no-op classes (`text-ink-400`, `bg-surface-50`)
+
+The "Legacy alias" CSS token system (`resources/css/app.css`, ADR-42/48)
+exists precisely so pages can be ported by copying v2's className strings
+unchanged — `bg-navy-900`, `text-ink-500`, `border-line-100`, etc. all
+resolve through `var()` to this port's canonical brand tokens. Two classes
+that appear in v2's own source — `text-ink-400` (`Trust.tsx`'s security-
+contact line) and `bg-surface-50` (`legal/cookies/page.tsx`'s essential-
+cookies table header) — were checked directly against v2's own
+`globals.css` and are **not defined there either**: v2's token system only
+goes to `ink-500` and `surface`/`surface-0`, so both classes are silent,
+harmless no-ops in the original app too, not omissions in this port. Per
+the standing principle (ADR-42/48: port v2's real gaps as-is rather than
+"fixing" them into a new alias), both were left verbatim.
+
+### ADR-72: `PilotProgram/Apply.tsx` gains `SiteHeader`/`SiteFooter` — a real, deliberate visual change from Stage 8, not new content
+
+Stage 8 shipped `Apply.tsx` standalone (just a centered `Logo`, no site
+chrome) because Stage 12 — the marketing site the header/footer link
+back into — didn't exist yet; its own docblock said so explicitly.
+v2's `pilot-program/apply/page.tsx` has always wrapped the form in
+`SiteHeader`/`SiteFooter`, including around the post-submit success
+card. This stage closes that gap: both the form state and the
+`application-submitted` success state now render inside the shared
+marketing chrome, matching v2 exactly. No Action, validation, or
+controller logic changed — `SubmitPilotApplicationAction` and its Stage 8
+test coverage are untouched; this was a template-only change, confirmed
+by the full Pest suite passing unchanged (487/487) after the edit.
+
+### ADR-73: `Beta.tsx` and `Docs.tsx` are `noindex, nofollow` via a literal `<meta>` inside Inertia's `<Head>`, not a typed `robots` prop — because Inertia's `<Head>` has no such API
+
+v2 sets `metadata = { robots: { index: false, follow: false } }` on both
+pages — Next's typed metadata object, which Next itself lowers to a
+`<meta name="robots" ...>` tag at render time. `@inertiajs/react`'s
+`<Head>` has no equivalent typed metadata API; it's a thin portal for
+arbitrary `<head>` children. The direct, honest equivalent is writing the
+resulting tag literally: `<Head title="..."><meta name="robots"
+content="noindex, nofollow" /></Head>`. Verified live: both pages'
+rendered `<head>` contains the tag (confirmed via
+`document.querySelector('meta[name=robots]').content` in the smoke test
+below). Both pages remain deliberately unlinked from `SiteHeader`'s nav
+and `SiteFooter`, matching v2 — reachable by direct URL only, same
+"unlisted, not access-controlled" posture v2 chose (there's no
+sensitive data on either page).
+
+### ADR-74: The 404 page is `Route::fallback()` rendering an Inertia page at a real 404 status, not a 200-status "not found" view
+
+Next.js renders `not-found.tsx` automatically for any path that doesn't
+match a route (or an explicit `notFound()` call), at a genuine 404 HTTP
+status. Laravel's closest built-in equivalent is `Route::fallback()`,
+registered last in `routes/web.php` (after every `require`, including
+the new `marketing.php`) so it only ever catches a request nothing else
+matched. It renders `Inertia::render('NotFound')` and explicitly forces
+the status code — `->toResponse(request())->setStatusCode(404)` — since
+`Inertia::render()` defaults to 200 and getting the status code right
+matters for anything that respects it (crawlers, monitoring, the
+`noindex`-adjacent instinct of not serving "missing page" content as if
+it were real). `NotFound.tsx` ports v2's `not-found.tsx` verbatim:
+no `SiteHeader`/`SiteFooter`, just a centered heading and a link back to
+`home`. Confirmed live at a nonsense path: page renders, and
+`read_network_requests` showed the response as `404 Not Found`.
+
+### ADR-75: The app-wide missing-per-page-`<Head title>` gap (23+ pre-Stage-12 pages) is explicitly deferred, not silently dropped
+
+While researching this stage it became clear that no page anywhere in
+this app prior to Stage 12 — across all 11 previous stages, 23+ pages —
+ever calls `<Head title="...">`; every one of them silently falls back
+to `resources/js/app.tsx`'s `DEFAULT_TITLE`. This predates Stage 12
+entirely and isn't in its scope (marketing/SEO parity for the *new*
+public-facing pages), so it wasn't fixed here. It's recorded here rather
+than left implicit so it isn't mistaken for an oversight: every one of
+Stage 12's own 11 new pages *does* set a page-specific `<Head title>`
+(or deliberately omits it, per ADR-73's homepage case — v2's own
+homepage has no `metadata` export either), so this stage is fully
+parity-correct for its own pages. Retrofitting titles onto the
+pre-existing 23+ pages is left as a candidate for Stage 13's post-
+migration cleanup, where product-neutral polish like this belongs.
+
+### ADR-76: `<Analytics />` (Vercel Analytics) is a deliberate, unported omission — no Laravel/Vercel-neutral equivalent exists
+
+v2's root `layout.tsx` renders `<Analytics />` from `@vercel/analytics/
+react`, a Vercel-hosting-specific pageview beacon, alongside PostHog
+(already fully ported in Stage 11). This port doesn't deploy on Vercel,
+so there is no equivalent service to wire it to, and inventing one would
+be new infrastructure, not a rewrite of existing behavior. PostHog's
+`capture_pageview: true` (Stage 11, ADR-66) already provides the
+pageview-analytics behavior this app actually needs; `<Analytics />`'s
+omission is a deployment-target difference, not a feature gap.
+
+### ADR-77: Live smoke test — every new marketing/legal page render-verified at `localhost:8123`, plus the 404 fallback and `Apply.tsx`'s new chrome
+
+Ran the full verification loop before this smoke test: `tsc --noEmit`
+clean, `eslint --fix` (only prettier formatting deltas, no logic
+changes), `pint --test` passed, `vite build` succeeded, and
+`php artisan test` passed 487/487 (1,545 assertions) unchanged. Then,
+against the running dev server: `/` (homepage, nav links confirmed
+present in the DOM — responsively hidden below the `md` breakpoint in a
+narrow viewport, not missing), `/pilot-program` (timeline + sample
+savings-assessment card), `/beta` and `/docs` (both confirmed
+`noindex, nofollow` via `document.querySelector`), `/legal/privacy` and
+`/legal/cookies` (including the essential-cookies table), a nonsense
+path (confirmed real `404 Not Found` via network inspection, not just
+visual), and `/pilot-program/apply` (confirmed `SiteHeader`/`SiteFooter`
+now wrap the form, per ADR-72). All rendered correctly against the
+brand tokens with no console errors. `route:list` was cross-checked
+against every route name referenced by `SiteHeader.tsx`, `SiteFooter.tsx`,
+and `FaqAccordion.tsx` to confirm none were left dangling.
 
 ---
 
