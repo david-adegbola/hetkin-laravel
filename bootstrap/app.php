@@ -25,6 +25,16 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // Trust every proxy's X-Forwarded-* headers — this app is never
+        // meant to be reached directly, only behind a platform load
+        // balancer/TLS-terminating proxy (Laravel Cloud, Forge's Nginx,
+        // etc. — see DEPLOYMENT.md), whose IP isn't fixed enough to
+        // enumerate. Without this, requests behind such a proxy look like
+        // plain HTTP internally, which breaks `SESSION_SECURE_COOKIE=true`
+        // (the cookie silently never gets set) and any `url()`/`route()`
+        // generation that should be `https://`.
+        $middleware->trustProxies(at: '*');
+
         // App\Http\Middleware\UseSessionRealm must run before
         // Illuminate\Session\Middleware\StartSession resolves the session
         // store — StartSession is one of Laravel's "prioritized" framework

@@ -11,6 +11,10 @@ behind every non-obvious choice made along the way.
 487 passing tests, clean `tsc`/ESLint/Pint, a clean production build.
 Stage 13 (post-migration technical modernization) has not started.
 
+This document covers running the app locally. Deploying it live —
+where each environment variable comes from and the recommended hosting
+path — is covered in [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Stack
 
 - **Backend:** Laravel 12, PHP 8.3+, PostgreSQL
