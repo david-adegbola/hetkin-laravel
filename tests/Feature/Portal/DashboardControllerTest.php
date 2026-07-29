@@ -1,11 +1,19 @@
 <?php
 
 use App\Domain\Alerts\Models\Alert;
+use App\Domain\Billing\Models\SavingsAssessment;
+use App\Domain\Billing\Models\VerificationRecord;
+use App\Domain\Metering\Models\MeteringPoint;
+use App\Domain\Metering\Models\MeterReading;
+use App\Domain\Metering\Models\Site;
+use App\Domain\Optimization\Enums\RecommendationDecisionType;
 use App\Domain\Optimization\Models\OptimizationRun;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Scheduling\Models\ProductionSchedule;
+use App\Domain\Scheduling\Models\ScheduleBlock;
 
 test('a member sees the portal dashboard', function () {
     ['user' => $user] = portalUser();
@@ -85,4 +93,108 @@ test('the dashboard never shows another organization\'s alerts', function () {
     $response->assertInertia(fn ($page) => $page
         ->where('activeAlertCount', 0)
         ->has('recentAlerts', 0));
+});
+
+test('verified savings MTD only sums live-approved records within the current month', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+
+    VerificationRecord::factory()->liveApproved()->for($organization, 'organization')->create([
+        'period_start' => now()->startOfMonth(),
+        'verified_savings_cents' => 15_000,
+    ]);
+    // Same month, but not yet approved — must not count.
+    VerificationRecord::factory()->for($organization, 'organization')->create([
+        'period_start' => now()->startOfMonth(),
+        'verified_savings_cents' => 99_999,
+    ]);
+    // Approved, but last month — must not count toward MTD.
+    VerificationRecord::factory()->liveApproved()->for($organization, 'organization')->create([
+        'period_start' => now()->subMonthNoOverflow()->startOfMonth(),
+        'verified_savings_cents' => 50_000,
+    ]);
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page->where('mtdSavingsCents', 15_000));
+});
+
+test('verified savings YTD sums every live-approved record in the current year', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+
+    VerificationRecord::factory()->liveApproved()->for($organization, 'organization')->create([
+        'period_start' => now()->startOfMonth(),
+        'verified_savings_cents' => 10_000,
+    ]);
+    VerificationRecord::factory()->liveApproved()->for($organization, 'organization')->create([
+        'period_start' => now()->startOfYear(),
+        'verified_savings_cents' => 20_000,
+    ]);
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page->where('ytdSavingsCents', 30_000));
+});
+
+test('recommendation adoption counts accepted and partial decisions as followed', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+    $run = OptimizationRun::factory()->for($organization, 'organization')->create();
+
+    $accepted = Recommendation::factory()->for($run, 'optimizationRun')->create();
+    RecommendationDecision::factory()->for($accepted)->create(['decision' => RecommendationDecisionType::Accepted]);
+    $partial = Recommendation::factory()->for($run, 'optimizationRun')->create();
+    RecommendationDecision::factory()->for($partial)->create(['decision' => RecommendationDecisionType::Partial]);
+    $rejected = Recommendation::factory()->for($run, 'optimizationRun')->create();
+    RecommendationDecision::factory()->for($rejected)->create(['decision' => RecommendationDecisionType::Rejected]);
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('adoptionRate', 67)
+        ->where('followedCount', 2)
+        ->where('totalDecisions', 3));
+});
+
+test('adoption rate is null when no recommendations have been decided yet', function () {
+    ['user' => $user] = portalUser();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('adoptionRate', null)
+        ->where('totalDecisions', 0));
+});
+
+test('the onboarding checklist reflects real organization state', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $meteringPoint = MeteringPoint::factory()->for($site)->create();
+    MeterReading::factory()->for($meteringPoint, 'meteringPoint')->create();
+    SavingsAssessment::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('onboarding.hasMeterData', true)
+        ->where('onboarding.hasAssessment', true)
+        ->where('onboarding.hasScheduleBlock', true)
+        ->where('onboarding.hasDecision', false));
+});
+
+test('the onboarding checklist is all-false for a brand new organization', function () {
+    ['user' => $user] = portalUser();
+
+    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('onboarding.hasMeterData', false)
+        ->where('onboarding.hasAssessment', false)
+        ->where('onboarding.hasScheduleBlock', false)
+        ->where('onboarding.hasDecision', false));
 });

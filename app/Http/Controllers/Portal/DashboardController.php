@@ -3,31 +3,66 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Domain\Alerts\Models\Alert;
+use App\Domain\Billing\Enums\VerificationReviewStatus;
+use App\Domain\Billing\Models\SavingsAssessment;
+use App\Domain\Billing\Models\VerificationRecord;
+use App\Domain\Metering\Models\MeterReading;
+use App\Domain\Optimization\Enums\RecommendationDecisionType;
 use App\Domain\Optimization\Models\Recommendation;
+use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
+use App\Domain\Scheduling\Models\ScheduleBlock;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * Portal overview — mirrors the Next.js app's src/app/(portal)/dashboard/
- * page.tsx in spirit, not yet in full: that page's OTHER three stat cards
- * (verified savings MTD/YTD, recommendation adoption rate) query
- * VerificationRecord aggregates this port hasn't built a view for yet —
- * a distinct gap from Alerts, not blocked by anything Stage 10 builds.
- * Rendering an approximation now, backed by nothing, would show numbers
- * that don't mean what they claim to — worse than an honest interim page.
- * See MIGRATION_PLAN.md ADR-33.
+ * page.tsx in full as of MIGRATION_PLAN.md's post-Stage-12 ADR. The three
+ * stat cards this controller used to defer (verified savings MTD/YTD,
+ * recommendation adoption rate) needed VerificationRecord/RecommendationDecision
+ * aggregates this port hadn't built views for at Stage 5 — all three now
+ * exist (Stages 6-7), so the gap ADR-33 flagged is closed.
  *
- * "Recent recommendations" (Stage 6) and "Active alerts"/"Alerts" (Stage
- * 10) ARE real and ported in full — the rest stays deferred until its own
- * data exists.
+ * v2's onboarding-status check is wrapped in `unstable_cache` there purely
+ * to skip repeating three cheap existence queries plus an RLS
+ * `set_config` round trip on every load, forever — see v2's
+ * src/lib/onboarding-status.ts docblock. Neither cost applies to this
+ * port (tenant scoping here is a plain Eloquent global scope, not a
+ * per-request RLS transaction), so this runs the three `exists()` checks
+ * directly with no caching layer to port.
  */
 class DashboardController extends Controller
 {
     public function show(CurrentOrganization $currentOrganization): Response
     {
         $organization = $currentOrganization->get();
+        $now = Carbon::now();
+        $monthStart = $now->clone()->startOfMonth();
+        $yearStart = $now->clone()->startOfYear();
+
+        $mtdSavingsCents = (int) VerificationRecord::query()
+            ->where('organization_id', $organization->id)
+            ->where('review_status', VerificationReviewStatus::LiveApproved)
+            ->where('period_start', '>=', $monthStart)
+            ->sum('verified_savings_cents');
+
+        $ytdSavingsCents = (int) VerificationRecord::query()
+            ->where('organization_id', $organization->id)
+            ->where('review_status', VerificationReviewStatus::LiveApproved)
+            ->where('period_start', '>=', $yearStart)
+            ->sum('verified_savings_cents');
+
+        // Full and partial adoption both count as "followed" (mirrors v2's
+        // own comment: a scheduler who partially adopts is still acting on
+        // the recommendation, just not exactly as proposed — a materially
+        // different signal from an outright reject-with-reason).
+        $decisions = RecommendationDecision::query()
+            ->whereHas('recommendation.optimizationRun', fn ($query) => $query->where('organization_id', $organization->id))
+            ->pluck('decision');
+        $followedCount = $decisions->filter(fn (RecommendationDecisionType $d) => $d === RecommendationDecisionType::Accepted || $d === RecommendationDecisionType::Partial)->count();
+        $adoptionRate = $decisions->isNotEmpty() ? (int) round(($followedCount / $decisions->count()) * 100) : null;
 
         $recentRecommendations = Recommendation::query()
             ->whereHas('optimizationRun', fn ($query) => $query->where('organization_id', $organization->id))
@@ -40,7 +75,24 @@ class DashboardController extends Controller
 
         $recentAlerts = Alert::query()->latest('created_at')->take(4)->get();
 
+        $hasMeterData = MeterReading::query()
+            ->whereHas('meteringPoint.site', fn ($query) => $query->where('organization_id', $organization->id))
+            ->exists();
+
+        $hasAssessment = SavingsAssessment::query()
+            ->where('organization_id', $organization->id)
+            ->exists();
+
+        $hasScheduleBlock = ScheduleBlock::query()
+            ->whereHas('schedule', fn ($query) => $query->where('organization_id', $organization->id))
+            ->exists();
+
         return Inertia::render('Portal/Dashboard', [
+            'mtdSavingsCents' => $mtdSavingsCents,
+            'ytdSavingsCents' => $ytdSavingsCents,
+            'adoptionRate' => $adoptionRate,
+            'followedCount' => $followedCount,
+            'totalDecisions' => $decisions->count(),
             'recentRecommendations' => $recentRecommendations->map(fn (Recommendation $recommendation) => [
                 'id' => $recommendation->id,
                 'rationale' => $recommendation->rationale,
@@ -63,6 +115,12 @@ class DashboardController extends Controller
                 'body' => $alert->body,
                 'created_at' => $alert->created_at->toIso8601String(),
             ]),
+            'onboarding' => [
+                'hasMeterData' => $hasMeterData,
+                'hasAssessment' => $hasAssessment,
+                'hasScheduleBlock' => $hasScheduleBlock,
+                'hasDecision' => $decisions->isNotEmpty(),
+            ],
         ]);
     }
 }

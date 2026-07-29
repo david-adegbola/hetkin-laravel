@@ -74,6 +74,7 @@ review) — building it earlier would mean building it twice.
 | 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | **Complete** | ADR-64..ADR-69. ENTSO-E itself was pulled forward into Stage 10. |
 | 12. Marketing site + SEO/OG parity | **Complete** | ADR-70..ADR-77 |
 | Post-Stage-12: Nav & Account Security parity restoration | **Complete** | ADR-78..ADR-82. Billing icon fix, Team & Permissions + Support restored (deferred by ADR-33), Security integrated into PortalLayout + nav. |
+| Post-Stage-12: Enterprise dashboard UX review | **Complete** | ADR-83..ADR-85. 14 of 16 proposed items rejected with reasoning (domain mismatch or premature); Portal Dashboard's v2 stat cards + onboarding checklist (ADR-33's last open gap) closed. |
 
 ## Architecture Decisions
 
@@ -2199,6 +2200,137 @@ unchanged app-wide behavior, not a regression introduced here.
 Authorization re-confirmed via the automated suite (non-member redirected
 to sign-in on both new routes) rather than repeated manually in-browser,
 since that path was already covered.
+
+---
+
+## Post-Stage-12: Enterprise Dashboard UX Review
+
+### Objective
+
+A UX review proposed 16 enterprise-dashboard enhancements, referencing
+external (non-Hetkin) energy-dashboard screenshots as inspiration for
+enterprise information architecture, not as a copy target. Each item was
+evaluated against the decision framework the review itself specified:
+does it improve operational decision-making, does it fit Hetkin's actual
+domain model, does it integrate with existing entities, and would a
+customer naturally expect it. Investigation happened first — reading the
+current `DashboardController`/`Dashboard.tsx`, the full domain model
+(Organizations, Metering, Optimization, Pricing, Billing), the existing
+Admin console, and v2's real dashboard source — before any code changed.
+
+### ADR-83: Fourteen of sixteen proposed enhancements rejected against the decision framework — reasoning recorded per item, not silently dropped
+
+Most of the review's list doesn't fit Hetkin's actual domain or is
+already built:
+
+- **Context switching (org/site/metering point/market area)** —
+  structurally doesn't apply. A customer belongs to exactly one
+  organization (`Member` is a 1:1 link). `Site` is auto-bootstrapped as
+  a singleton per org (`UploadMeterReadingsAction`:
+  `Site::firstWhere('organization_id', ...) ?? Site::create(...)`) —
+  nothing to switch between. `BiddingZone` is a hardcoded single case
+  (`FI`) — no multi-market concept exists, in v2 or here.
+- **Carbon intensity / carbon reduction indicators** — no carbon data
+  exists anywhere in the schema or the ENTSO-E integration. Absent from
+  Hetkin's domain entirely; specific to the reference screenshots, not
+  something to backfill.
+- **Recommendation confidence scores** — confirmed zero infrastructure
+  (grepped the whole `Optimization` domain). Not built, per the review's
+  own instruction not to invent AI confidence values — same posture as
+  ADR-81's 2FA extension point: no UI, no placeholder, nothing to see
+  until a real scoring mechanism exists.
+- **Portfolio benchmarking, org-vs-org comparison, month/quarter/year
+  trend views** — the domain could support these eventually, but a
+  pilot-stage customer has days-to-weeks of real data, not quarters or
+  years. Building comparison UI against data that doesn't exist yet
+  would render misleading flat/empty charts — premature, not merely
+  unbuilt.
+- **Executive Portfolio Dashboard / Executive Operations Center** — already
+  exists. `Admin\DashboardController` + `Admin/Overview.tsx` (Stage 9)
+  already show org counts by status, pending pilots, baseline/
+  verification/invoice status, ENTSO-E price staleness, job-run health,
+  audit-chain integrity, and a computed `needs_attention` flag — this
+  ask, already real, already tested. Nothing added.
+- **Data freshness indicators** — already implemented: `connection_healthy`
+  and `last_reading_at` are already shown on `Portal/Data.tsx`
+  (confirmed by reading the page and its controller); `pricing_freshness`
+  already exists on the Admin Overview. Nothing missing.
+- **Historical playback** — `ScheduleHistory.tsx` and versioned baselines
+  already cover this per-entity (Stages 5-7); a separate unified
+  "playback" surface would be new information architecture with no v2
+  precedent and no concrete request behind it.
+- **CSV/Excel export, heatmaps, interactive zoom/pan/quarter/year chart
+  ranges** — not backed by any ADR or v2 precedent, and not justified by
+  data that exists yet at pilot scale. Flagged as candidate **future
+  product decisions**, not built now — per the review's own framework
+  ("if the answer is no... recommend whether it should become a future
+  product decision").
+
+### ADR-84: The one genuine, fully-backed gap — v2's real dashboard stat cards and onboarding checklist, closed using data that now exists
+
+`DashboardController`'s docblock had said since Stage 5: v2's dashboard
+has four stat cards (verified savings MTD/YTD, recommendation adoption
+rate, active alerts) plus an onboarding checklist, deferred only because
+"that page's OTHER three stat cards query VerificationRecord aggregates
+this port hasn't built a view for yet." That's no longer true —
+`Baseline`, `SavingsAssessment`, `VerificationRecord` (Stage 7) and
+`RecommendationDecision` (Stage 6) all exist now. Read v2's actual
+`src/app/(portal)/dashboard/page.tsx` in full rather than approximating
+from memory: it's a 4-stat-card grid + `OnboardingChecklist` (4 steps —
+upload data → generate assessment → add schedule → act on a
+recommendation, permanently disappears once complete) + the existing
+recommendations/alerts two-column layout, title "Savings Dashboard" (not
+"Dashboard").
+
+Ported both pieces exactly:
+
+- **Stat cards** — `DashboardController` now computes `mtdSavingsCents`/
+  `ytdSavingsCents` (`VerificationRecord::where('review_status',
+  LiveApproved)->where('period_start', '>=', ...)->sum(...)`, scoped to
+  the current month/year), and `adoptionRate` (accepted + partial
+  decisions ÷ total, matching v2's exact "both count as followed, a
+  partial adopter is still acting on the recommendation" comment) —
+  null when zero decisions exist, never a misleading 0%.
+- **Onboarding checklist** — three `exists()` checks
+  (`MeterReading::whereHas('meteringPoint.site', ...)`,
+  `SavingsAssessment::where('organization_id', ...)`,
+  `ScheduleBlock::whereHas('schedule', ...)`) plus the existing
+  decision count. v2 wraps its three equivalent checks in
+  `unstable_cache` purely to avoid repeating an RLS `set_config` round
+  trip on every dashboard load forever (see v2's
+  `src/lib/onboarding-status.ts` docblock) — neither cost applies here
+  (tenant scoping is a plain Eloquent global scope, not a per-request
+  RLS transaction), so this port runs the three checks directly with no
+  caching layer to build or maintain.
+- Title changed from "Dashboard" to "Savings Dashboard", matching v2
+  exactly.
+
+This single change also delivers the review's "information hierarchy"
+ask (live status → immediate actions → performance/savings → alerts)
+without any separate reorg work — v2's own layout already embodies that
+order; porting it faithfully was sufficient.
+
+### ADR-85: Validation
+
+8 new tests added to `DashboardControllerTest` (MTD excludes
+non-approved and prior-month records; YTD sums across the year;
+adoption rate counts accepted+partial as followed and excludes
+rejected; adoption rate is `null` with zero decisions, never `0`; the
+onboarding checklist reflects real per-check state; a brand-new
+organization shows all-false). Full suite: 501/501 passing (1,689
+assertions, up from 495/1,611 pre-change). `tsc --noEmit`, ESLint (two
+files needed `--fix` for prettier-only deltas), and Pint all clean;
+`vite build` succeeded.
+
+Live smoke test against a freshly seeded dev database: signed in as
+the seeded customer owner, confirmed the "Savings Dashboard" title, the
+onboarding checklist rendering all 4 steps with correct CTAs and "0 of
+4 done", all four stat cards showing correct empty-state values (€0.00
+MTD/YTD with the "no cycles closed yet" sub-label, "—" adoption with
+"No recommendations issued yet", 0 active alerts) — a fresh seeded org
+correctly shows real zeros with context, not broken-looking blanks.
+Confirmed mobile layout (375px): checklist items wrap correctly, stat
+cards stack to a single column, nothing overflows.
 
 ---
 
