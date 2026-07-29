@@ -2,6 +2,7 @@
 
 namespace App\Domain\Metering\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -28,10 +29,9 @@ use Illuminate\Support\Str;
  *   - session/membership resolution — takes an already-resolved
  *     Organization + User, the caller's job (see
  *     App\Domain\Organizations\Services\OrganizationContextResolver);
- *   - src/lib/analytics/server.ts's captureServerEvent (PostHog — Stage 11)
- *     and src/lib/onboarding-status.ts's cache invalidation (no onboarding
- *     checklist exists yet in this port) — both omitted as not yet built,
- *     not silently dropped; see MIGRATION_PLAN.md ADR-29.
+ *   - src/lib/onboarding-status.ts's cache invalidation — no onboarding
+ *     checklist exists yet in this port, omitted as not yet built, not
+ *     silently dropped; see MIGRATION_PLAN.md ADR-29.
  *
  * Ensures a default Site + MeteringPoint exist for the organization rather
  * than requiring a separate "add a site" step first, matching v2's own
@@ -54,6 +54,7 @@ class UploadMeterReadingsAction
         private readonly FingridCsvParser $parser,
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -84,7 +85,7 @@ class UploadMeterReadingsAction
         $this->currentOrganization->set($organization);
 
         try {
-            return DB::transaction(function () use ($organization, $user, $rows, $filename) {
+            $result = DB::transaction(function () use ($organization, $user, $rows, $filename) {
                 $site = Site::query()->firstWhere('organization_id', $organization->id);
                 if (! $site) {
                     $site = Site::create([
@@ -143,6 +144,14 @@ class UploadMeterReadingsAction
                     meteringPoint: $meteringPoint->refresh(),
                 );
             });
+
+            // Phase 1 §8 funnel: "Onboarding → First Data Upload".
+            $this->postHog->capture('meter_data_uploaded', $user->id, [
+                'organizationId' => $organization->id,
+                'rowCount' => $result->rowsWritten,
+            ]);
+
+            return $result;
         } finally {
             $this->currentOrganization->set($previousOrganization);
         }

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Pilots\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -38,14 +39,12 @@ use Illuminate\Support\Str;
  * offer this action for still-open applications, the same way v2's own
  * admin UI only ever renders Approve/Reject buttons for pending rows —
  * but nothing stops a replayed request from hitting the constraint.
- *
- * Deliberately omits the PostHog `pilot_application_approved` event
- * (Stage 11).
  */
 class ApprovePilotApplicationAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
+        private readonly PostHogService $postHog,
     ) {}
 
     /** 14 days — longer than a normal peer invite (7 days, InvitationFactory), since this is the pilot's first contact and may sit in an inbox over a weekend. */
@@ -98,6 +97,16 @@ class ApprovePilotApplicationAction
                 $application->contact_name,
                 $result->organization->name,
             ));
+
+        // Phase 1 §8 funnel: "Qualification → Approval". Same distinctId
+        // (contact email) as pilot_application_submitted, so the two
+        // events chain into one funnel step for the same person in
+        // PostHog.
+        $this->postHog->capture('pilot_application_approved', $application->contact_email, [
+            'applicationId' => $application->id,
+            'organizationId' => $result->organization->id,
+            'processType' => $application->process_type->value,
+        ]);
 
         return $result;
     }

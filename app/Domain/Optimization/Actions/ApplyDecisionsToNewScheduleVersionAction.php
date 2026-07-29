@@ -2,6 +2,7 @@
 
 namespace App\Domain\Optimization\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -35,15 +36,13 @@ use Illuminate\Support\Facades\DB;
  * Does not write back to the customer's own ERP (Phase 2 §5.2 — "manually
  * re-entered in ERP in v1... a natural v2, not a v1 requirement"). This is
  * Hetkin's own internal record of what was decided.
- *
- * Omits src/lib/analytics/server.ts's captureServerEvent (Stage 11, not
- * built) — not silently dropped, see MIGRATION_PLAN.md ADR-33.
  */
 class ApplyDecisionsToNewScheduleVersionAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -104,7 +103,7 @@ class ApplyDecisionsToNewScheduleVersionAction
 
             $newVersion = $currentSchedule->version + 1;
 
-            return DB::transaction(function () use ($organization, $user, $currentSchedule, $overrides, $newVersion) {
+            $result = DB::transaction(function () use ($organization, $user, $currentSchedule, $overrides, $newVersion) {
                 $created = ProductionSchedule::create([
                     'organization_id' => $organization->id,
                     'version' => $newVersion,
@@ -149,6 +148,14 @@ class ApplyDecisionsToNewScheduleVersionAction
                     blocksChanged: count($overrides),
                 );
             });
+
+            $this->postHog->capture('schedule_version_applied', $user->id, [
+                'organizationId' => $organization->id,
+                'newVersion' => $result->newVersion,
+                'blocksChanged' => $result->blocksChanged,
+            ]);
+
+            return $result;
         } finally {
             $this->currentOrganization->set($previousOrganization);
         }

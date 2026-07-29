@@ -11,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
+use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -103,4 +104,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // Reports every exception Laravel's own handler sees — the direct
+        // equivalent of v2's instrumentation.ts `onRequestError =
+        // Sentry.captureRequestError` hook, which reports errors from
+        // Server Components/middleware/route handlers without every call
+        // site needing its own explicit Sentry.captureException(). A
+        // no-op when SENTRY_LARAVEL_DSN is unset (config/sentry.php),
+        // same posture as every other optional integration here.
+        Integration::handles($exceptions);
     })->create();

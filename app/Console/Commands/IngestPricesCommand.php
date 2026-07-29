@@ -6,7 +6,11 @@ use App\Domain\Jobs\Services\JobRunTracker;
 use App\Domain\Pricing\Actions\IngestPricesAction;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Sentry\State\Scope;
 use Throwable;
+
+use function Sentry\captureException;
+use function Sentry\withScope;
 
 /**
  * Ports the Next.js app's GET/POST /api/internal/ingest-prices route
@@ -35,6 +39,16 @@ class IngestPricesCommand extends Command
         } catch (Throwable $e) {
             $this->error("[ingest-prices] {$e->getMessage()}");
             Log::error('[cron] ingest-prices run failed', ['exception' => $e]);
+
+            // Matches v2's own route handler exactly: `Sentry.captureException(err,
+            // { tags: { job: "ingest-prices" } })` — this feed failing silently was
+            // already flagged as a serious problem there; Sentry is what turns
+            // "silently" into "someone gets paged." No-ops when SENTRY_LARAVEL_DSN
+            // is unset.
+            withScope(function (Scope $scope) use ($e): void {
+                $scope->setTag('job', 'ingest-prices');
+                captureException($e);
+            });
 
             return self::FAILURE;
         }

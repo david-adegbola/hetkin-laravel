@@ -10,6 +10,9 @@ use Illuminate\Notifications\Notification;
 /**
  * Sent after App\Domain\Auth\Actions\LogoutOtherDevicesAction removes every
  * session row except the caller's current one.
+ *
+ * ShouldQueue: a deliberate, tested Account Security requirement (see
+ * App\Notifications\PasswordResetRequested's docblock) — not v2 parity.
  */
 class LoggedOutAllDevices extends Notification implements ShouldQueue
 {

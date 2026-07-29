@@ -5,6 +5,7 @@ namespace App\Domain\Billing\Actions;
 use App\Domain\Alerts\Actions\CreateAlertAction;
 use App\Domain\Alerts\Enums\AlertSeverity;
 use App\Domain\Alerts\Enums\AlertType;
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -35,18 +36,18 @@ use Illuminate\Support\Facades\DB;
  * oversight; see MIGRATION_PLAN.md's Stage 7 ADR for why it's ported
  * as-is rather than "fixed" to auto-supersede.
  *
- * Deliberately still omits, matching v2 features this port hasn't built
- * yet:
- *   - PostHog `savings_assessment_generated` event (Stage 11).
- *   - Onboarding-status cache invalidation — same reasoning as
- *     UploadMeterReadingsAction/AddScheduleBlockAction.
- * Neither is silently dropped; both are noted here so a future stage
- * knows exactly what to add back once their domains exist.
+ * Deliberately still omits one v2 feature this port hasn't built yet:
+ * onboarding-status cache invalidation — same reasoning as
+ * UploadMeterReadingsAction/AddScheduleBlockAction. Not silently dropped;
+ * noted here so a future stage knows exactly what to add back once that
+ * domain exists.
  *
- * The REPORT_READY alert (Stage 10) fires AFTER the domain transaction
- * commits, unconditionally (no threshold — every successful generation
- * gets one), using the plain `CreateAlertAction`, matching v2's
- * `createAlert()` call with `scopedDb` rather than the transaction's `tx`.
+ * The REPORT_READY alert (Stage 10) and the PostHog
+ * `savings_assessment_generated` event (Stage 11) both fire AFTER the
+ * domain transaction commits — the alert unconditionally (no threshold,
+ * every successful generation gets one), using the plain
+ * `CreateAlertAction`, matching v2's `createAlert()` call with
+ * `scopedDb` rather than the transaction's `tx`.
  */
 class GenerateSavingsAssessmentAction
 {
@@ -55,6 +56,7 @@ class GenerateSavingsAssessmentAction
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
         private readonly CreateAlertAction $createAlertAction,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -154,6 +156,13 @@ class GenerateSavingsAssessmentAction
 
                 return $assessment->refresh();
             });
+
+            // Phase 1 §8 funnel: "Savings Assessment Generated".
+            $this->postHog->capture('savings_assessment_generated', $user->id, [
+                'organizationId' => $organization->id,
+                'estimatedAnnualSavingsCents' => $result->estimatedAnnualSavingsCents,
+                'isProvisional' => $result->isProvisional,
+            ]);
 
             $this->createAlertAction->execute(
                 $organization->id,

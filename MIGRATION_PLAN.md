@@ -71,7 +71,7 @@ review) — building it earlier would mean building it twice.
 | 8. Pilot funnel | **Complete** | ADR-46..ADR-50 |
 | 9. Admin Console | **Complete** | ADR-51..ADR-57 |
 | 10. Background Jobs & Scheduler | **Complete** | ADR-58..ADR-63 |
-| 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | Not started | ENTSO-E itself was pulled forward into Stage 10 (needed by ingest-prices/backfill) — this stage is now mainly Resend, PostHog, Sentry |
+| 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | **Complete** | ADR-64..ADR-69. ENTSO-E itself was pulled forward into Stage 10. |
 | 12. Marketing site + SEO/OG parity | Not started | |
 
 ## Architecture Decisions
@@ -1676,6 +1676,256 @@ No bugs found this time — unlike ADR-56's Stage 9 smoke test, which
 caught two real Postgres-only issues, this stage's live run matched its
 sqlite-backed test suite's expectations exactly. Test data was cleared
 via a second `migrate:fresh` immediately after.
+
+## Stage 11: External Integrations
+
+### ADR-64: Resend — already functionally wired by earlier stages; Stage 11 closes the remaining gap and fixes one real behavior mismatch
+
+Confirmed via direct inspection that every notification this stage's
+scope covers was already built in earlier stages
+(`App\Notifications\{InvitationResent,PilotApplicationApproved,
+AdminAccountCreated,PilotApplicationSubmitted}`, `config/services.php`'s
+`resend.key`, `config/mail.php`'s `pilot_notification_address`) — each
+one's own docblock said outright "wiring a real transport is Stage 11
+scope." What was actually missing: `resend/resend-php` was referenced in
+`composer.lock` but never actually required (`composer show` returned
+"not found"), so Laravel's `resend` mailer transport would have failed at
+runtime despite looking configured. `composer require resend/resend-php`
+fixes that; `.env.example` now documents `RESEND_API_KEY`, `CONTACT_EMAIL`,
+and production `MAIL_MAILER=resend`/`MAIL_FROM_ADDRESS` — mirroring v2's
+own `.env.example`'s "Email (Resend)" section, including its exact
+domain-verification caveat (an unverified Resend domain rejects sends to
+any recipient but the account owner's own address).
+
+One real behavior mismatch found and fixed: v2's `notifyTeam()` (the
+internal new-pilot-application alert) hardcodes
+`from: "Hetkin pilot applications <onboarding@resend.dev>"` rather than
+using the shared `RESEND_FROM_ADDRESS` every other email uses — safe only
+for that one email because it always sends to `CONTACT_EMAIL` (the
+account owner's own inbox), so it was never blocked by domain
+verification and never needed fixing. This port's `PilotApplicationSubmitted`
+notification had no `->from()` override, so once `MAIL_FROM_ADDRESS` gets
+set to a real verified address in production, that internal alert would
+have silently started sending from the wrong address. Fixed by adding the
+identical hardcoded `->from('onboarding@resend.dev', 'Hetkin pilot
+applications')` override, covered by a dedicated test asserting the
+`from` field.
+
+### ADR-65: PostHog server-side capture — `App\Domain\Analytics\Services\PostHogService`, all nine real v2 call sites wired with exact event names, distinctIds, and properties
+
+Ports `src/lib/analytics/server.ts`'s `captureServerEvent()` exactly:
+constructs a `PostHog\Client` directly (not the package's static facade,
+for constructor-injection testability matching every other Action
+dependency in this codebase) and explicitly calls `flush()` after every
+`capture()` — the same trade v2's `posthog-node` client makes via
+`flushAt: 1, flushInterval: 0`, for the identical reason: a short-lived
+process (Vercel's serverless functions there, a single PHP-FPM request
+here) can end before a delayed batch ever sends, silently losing events.
+A missing/unset `POSTHOG_KEY` makes `capture()` a silent no-op, never
+throwing into its caller — same posture as every other optional
+integration in this app.
+
+All nine real `captureServerEvent()` call sites were found via direct
+grep against v2 (not assumed from the domain), each ported with v2's
+exact event name, `distinctId` choice, and property payload:
+
+| Event | Action | distinctId |
+|---|---|---|
+| `pilot_application_submitted` | `SubmitPilotApplicationAction` | contact email |
+| `pilot_application_approved` | `ApprovePilotApplicationAction` | contact email (same as above, chains the funnel) |
+| `onboarding_completed` | `AcceptInvitationAction` | the new user's id, plus a PostHog `$set: {email}` |
+| `meter_data_uploaded` | `UploadMeterReadingsAction` | uploading user's id |
+| `recommendation_decision` | `DecideRecommendationAction` | deciding user's id |
+| `schedule_version_applied` | `ApplyDecisionsToNewScheduleVersionAction` | applying user's id |
+| `savings_assessment_generated` | `GenerateSavingsAssessmentAction` | generating user's id |
+| `verification_computed` | `RunVerificationAction` | the organization id (cron, no user session) |
+| `invoice_issued` | `IssueInvoiceAction` | the organization id (admin action, org-scoped) |
+
+Every call site fires after its domain transaction commits (never inside
+one — an analytics call has no business holding a database lock), and
+every no-op guard clause v2 has (a non-DRAFT invoice, an
+already-a-member invitation acceptance) is preserved exactly: the event
+simply never fires on those paths, covered by dedicated tests for both.
+`onboarding_completed`'s PostHog `$set` property (updating the person
+profile's email, switching PostHog's identity from the pre-signup email
+distinctId to the real user id) is passed through as a literal
+`'$set' => [...]` array key — PostHog's own wire protocol convention, not
+Laravel-specific.
+
+### ADR-66: PostHog client-side — one `initPostHog()` call, not a `<PostHogProvider>` component; `VITE_`-prefixed env vars split from v2's single `NEXT_PUBLIC_` pair
+
+Ports `src/components/PostHogProvider.tsx`'s init call exactly
+(`capture_pageview: true`, `person_profiles: 'identified_only'`) from
+`resources/js/lib/analytics.ts`, called once in `resources/js/app.tsx`'s
+bootstrap. Deliberately not wrapped as a context-providing
+`<PostHogProvider>` component the way v2 does: nothing in this port calls
+posthog-js's `usePostHog()` hook (every meaningful event is captured
+server-side, per ADR-65), so there's no component tree that needs the
+context v2's wrapper provided — a plain init call is the same observable
+behavior with less machinery. Inertia navigations use the History API
+(`pushState`), the same mechanism a Next.js App Router client-side
+transition uses, so posthog-js's `capture_pageview` autocapture already
+listens for exactly that with no extra Inertia router-event wiring
+needed.
+
+`POSTHOG_KEY`/`POSTHOG_HOST` (server, read directly by PHP) and
+`VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` (client, bundled into the browser
+build) are two separate env-var pairs set to the same real PostHog
+project key/host in production — split only because Vite exposes
+`VITE_`-prefixed vars to client code and nothing else, unlike v2's single
+`NEXT_PUBLIC_POSTHOG_KEY` which served both a server-side Node process and
+the browser bundle from the identical Next.js-specific prefix convention.
+v2's own cookies-policy page admits a cookie-consent banner "is being
+rolled out" and doesn't exist yet — so none was added here either,
+matching v2's actual (not aspirational) behavior per this project's
+standing "port v2's real gaps, don't silently fix them" principle
+(ADR-42/48 and others).
+
+### ADR-67: Sentry server-side — `sentry/sentry-laravel`'s `Integration::handles()` hook is the direct equivalent of v2's `onRequestError`; wired into all three Stage 10 cron commands, revisiting ADR-62's explicit deferral
+
+`bootstrap/app.php`'s `->withExceptions()` callback now calls
+`Sentry\Laravel\Integration::handles($exceptions)` — every exception
+Laravel's own handler sees gets reported, with no per-call-site
+`captureException()` needed, the exact same shape as v2's
+`instrumentation.ts` `export const onRequestError = Sentry.
+captureRequestError`. `config/sentry.php` (published from the package)
+keeps every stock operational default (breadcrumbs, SQL/cache/queue
+tracing toggles) — v2 configures none of that, but none of it is
+customer/admin-observable product behavior either, so there was nothing
+to match by removing it; only `traces_sample_rate` was edited to
+replicate v2's actual `NODE_ENV === "development" ? 1.0 : 0.1` split
+(`local` being this app's own `APP_ENV` equivalent of that check), since
+the package's own stock default is `null` (tracing off entirely).
+
+Stage 10's ADR-62 deliberately deferred Sentry reporting in
+`IngestPricesCommand`/`GenerateAlertsCommand`/`RunVerificationCommand`'s
+catch blocks, reasoning that adding Sentry for just those three call
+sites — before the app had any Sentry integration at all — would be new
+infrastructure, not a port. Now that the integration exists, all three
+commands call `Sentry\withScope()`/`captureException()` with a `job` tag,
+matching v2's own job-route catch blocks exactly (`Sentry.
+captureException(err, { tags: { job: "ingest-prices" } })`), and
+`generate-alerts`/`run-verification` each got a new failure-path test
+(only `ingest-prices` had one from Stage 10) to actually exercise the new
+code, not just trust the pattern.
+
+A real bug surfaced and was fixed while wiring `traces_sample_rate`:
+calling `app()->environment('local')` directly inside `config/sentry.php`
+crashed the entire application on boot (`php artisan list` itself failed
+with a confusing "Target class [env] does not exist" error) — config
+files are evaluated during Laravel's `LoadConfiguration` bootstrap phase,
+before the container is guaranteed to hold a fully-capable `Application`
+instance, so calling into `app()` from inside one is unsafe. Fixed by
+reading `env('APP_ENV', 'production')` directly instead — config files
+should be side-effect-free and derived only from `env()`, never from
+`app()`-dependent logic, which this fix now also matches everywhere else
+in this codebase's config files.
+
+### ADR-68: Sentry client-side — `@sentry/react` + one `ErrorBoundary` consolidating v2's four route-segment error boundaries
+
+Ports `src/instrumentation-client.ts`'s init exactly (`dsn` with no
+fallback string — a genuinely no-op SDK when `VITE_SENTRY_DSN` is unset,
+`environment`, and the identical dev/prod `tracesSampleRate` split via
+Vite's `import.meta.env.DEV`) from `resources/js/lib/sentry.ts`, called
+once alongside `initPostHog()` in `resources/js/app.tsx`.
+
+v2 has four separate error boundaries — `src/app/error.tsx` (marketing),
+`global-error.tsx` (root, catches what escapes every other boundary),
+`(portal)/error.tsx`, and `admin/(protected)/error.tsx` — because the App
+Router's file-based routing gives each nested route segment its own
+boundary automatically. Inertia has no equivalent per-segment convention
+to hang four files off of, so `resources/js/Components/ErrorBoundary.tsx`
+consolidates all four into one class component wrapped around the whole
+app once, picking its fallback copy and "go back" destination at render
+time via a `detectRealm()` helper that mirrors v2's own client-side
+`isDashboardHost`/`isAdminHost` hostname-prefix check
+(`src/lib/subdomain-client.ts`) plus the bare-path form (`/dashboard`,
+`/admin`) this port's non-subdomain routes also need — deliberately
+reading `window.location` directly rather than Inertia's `subdomain`
+shared prop, for the same reason v2's own client-side helper avoids
+`headers()`: the boundary has to keep working even when the render that
+threw happened without a reliable page context. Reports via
+`Sentry.captureException(error, { contexts: { react: { componentStack
+}}})` in `componentDidCatch`, matching all four of v2's boundaries.
+
+Adding `@sentry/react` and `posthog-js` together grew the client bundle
+from ~345 kB to ~610 kB gzipped-equivalent total (Vite now code-splits
+Sentry into its own ~366 kB chunk) — a real, measurable cost with no
+product-behavior downside, noted here rather than addressed now since
+bundle-size optimization (dynamic imports, code-splitting) is explicitly
+Stage 13 (Technical Modernization) territory, not a migration-parity
+concern.
+
+### ADR-69: Live smoke test caught a real, systemic bug — every `Notification` class in this app was `ShouldQueue`, and no queue worker exists anywhere to process them
+
+Following this project's established practice (ADR-20/36/40/45/50/56/63):
+`migrate:fresh` against real Postgres, then a live browser session
+against `php artisan serve`, with no `RESEND_API_KEY`/`POSTHOG_KEY`/
+`SENTRY_LARAVEL_DSN` configured — deliberately, since every one of these
+three integrations' actual design point is graceful degradation without
+credentials, and that degraded path is exactly what's verifiable without
+real third-party accounts.
+
+Submitting a real pilot application via the public form persisted the
+`PilotApplication` correctly, but the internal notification email never
+appeared in `storage/logs/laravel.log` — `MAIL_MAILER=log` should have
+written it there immediately. Investigation found the actual cause:
+`DB::table('jobs')->count()` returned 1. `PilotApplicationSubmitted`
+(and every other `App\Notifications\*` class in this app —
+`InvitationResent`, `PilotApplicationApproved`, `AdminAccountCreated`,
+`PasswordResetRequested`, `PasswordResetCompleted`, `PasswordChanged`,
+`LoggedOutAllDevices`) `implements ShouldQueue`. With
+`QUEUE_CONNECTION=database` (this app's own local default) and no
+`php artisan queue:work` process running anywhere — not in
+`.claude/launch.json`, not in any Supervisor/systemd config, not
+mentioned in any ADR — a queued notification only ever gets a row
+inserted into the `jobs` table. It never actually sends. This is a real,
+systemic behavior regression from v2, which has no queue system at all:
+every email in v2 is awaited inline, synchronously, as part of the same
+Server Action that triggers it — the customer or admin either gets the
+email (or, with no Resend key, sees it logged) before the response
+returns, full stop.
+
+Fixed by removing `ShouldQueue`/`Queueable` from the four notifications
+that are genuine v2 ports with no documented reason to queue —
+`PilotApplicationSubmitted`, `PilotApplicationApproved`,
+`InvitationResent`, `AdminAccountCreated` — restoring the synchronous
+send v2 always does. The other four —
+`PasswordResetRequested`/`PasswordResetCompleted`/`PasswordChanged`/
+`LoggedOutAllDevices` — were deliberately left `ShouldQueue`:
+`tests/Feature/Notifications/AccountSecurityNotificationsTest.php`
+already has a test, `'every account-security notification is queued'`,
+enforcing this as a tested requirement from the Account Security
+module's own brief ("Queued email notification") — Account Security was
+an out-of-band addition ahead of Stage 2, not a v2 port, so there's no
+v2 behavior to match here in the first place, and overturning a
+deliberate, tested decision on the strength of a different bug's root
+cause would have been the wrong fix. The now-confirmed consequence —
+these four notifications also never actually send in this app's current
+deployment, for exactly the same reason — is a real gap, but the correct
+fix is standing up real queue-worker infrastructure (Supervisor, a
+systemd unit, or equivalent, with monitoring for stuck jobs), which is
+Stage 15 (Production Readiness) territory, not something to paper over
+by silently dropping a tested requirement.
+
+Re-verified after the fix: resubmitting the pilot application produced
+`DB::table('jobs')->count() === 0` and the full internal-notification
+email (subject, company, contact, ICP score) appeared in
+`storage/logs/laravel.log` immediately. Approving the application from
+the admin console produced the same result for
+`PilotApplicationApproved`. `PostHogService`'s and Sentry's client/server
+no-op guards were confirmed separately: no error surfaced anywhere in
+either flow, and the browser console showed no errors on a normal page
+load with both SDKs initialized and no keys configured — the same shape
+of confirmation Stage 10's ADR-63 already established for this project's
+other "safe no-op without a key" integrations (ENTSO-E). `ErrorBoundary`
+was verified via `tsc`/`vite build` passing cleanly rather than a forced
+live render-phase crash — React error boundaries only catch errors
+during rendering/lifecycle/constructors, not from a browser console
+injection, so safely forcing one from outside the app wasn't practical;
+its logic was reviewed directly instead. Test data (including the two
+smoke-test admin/pilot rows and the stray queued job) was cleared via a
+second `migrate:fresh` immediately after.
 
 ---
 

@@ -1,9 +1,15 @@
 import '../css/app.css';
 import './bootstrap';
 
+import { ErrorBoundary } from '@/Components/ErrorBoundary';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
+import { initPostHog } from './lib/analytics';
+import { initSentry } from './lib/sentry';
+
+initSentry();
+initPostHog();
 
 // Complements App\Http\Middleware\PreventBackHistoryCache (which stops a
 // page from being cached in the FIRST place) with a fallback for the rare
@@ -32,7 +38,11 @@ createInertiaApp({
     setup({ el, App, props }) {
         const root = createRoot(el);
 
-        root.render(<App {...props} />);
+        root.render(
+            <ErrorBoundary>
+                <App {...props} />
+            </ErrorBoundary>,
+        );
     },
     // The Next.js app has no global top-loading-bar — navigation feedback is
     // per-link (NavLink/PendingLink's instant tap acknowledgement) plus a

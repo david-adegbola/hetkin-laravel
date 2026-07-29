@@ -2,6 +2,7 @@
 
 namespace App\Domain\Organizations\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -32,6 +33,7 @@ class AcceptInvitationAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -73,5 +75,15 @@ class AcceptInvitationAction
                 organizationId: $invitation->organization_id,
             ));
         });
+
+        // Phase 1 §8 funnel: "Onboarding → First Data Upload" starts
+        // here — this is "onboarding completion". Switches distinctId
+        // from email (pilot_application_submitted/approved) to the real
+        // user id, and links the two together so the funnel doesn't
+        // break at this step.
+        $this->postHog->capture('onboarding_completed', $user->id, [
+            'organizationId' => $invitation->organization_id,
+            '$set' => ['email' => $user->email],
+        ]);
     }
 }

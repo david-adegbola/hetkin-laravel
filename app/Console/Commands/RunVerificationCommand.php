@@ -6,7 +6,11 @@ use App\Domain\Billing\Actions\RunVerificationAction;
 use App\Domain\Jobs\Services\JobRunTracker;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Sentry\State\Scope;
 use Throwable;
+
+use function Sentry\captureException;
+use function Sentry\withScope;
 
 /**
  * Ports the Next.js app's GET/POST /api/internal/run-verification route
@@ -34,6 +38,14 @@ class RunVerificationCommand extends Command
         } catch (Throwable $e) {
             $this->error("[run-verification] {$e->getMessage()}");
             Log::error('[cron] run-verification run failed', ['exception' => $e]);
+
+            // Matches v2's own route handler exactly: `Sentry.captureException(err,
+            // { tags: { job: "run-verification" } })`. No-ops when SENTRY_LARAVEL_DSN
+            // is unset.
+            withScope(function (Scope $scope) use ($e): void {
+                $scope->setTag('job', 'run-verification');
+                captureException($e);
+            });
 
             return self::FAILURE;
         }

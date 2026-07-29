@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use App\Domain\Organizations\Models\Invitation;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -14,11 +12,14 @@ use Illuminate\Notifications\Notification;
  * app/admin/(protected)/organizations/[id]/actions.ts). Reuses the same
  * still-pending invitation row/link as the original invite — this
  * notification never creates a new Invitation or extends `expires_at`.
+ *
+ * Deliberately NOT `ShouldQueue` — see App\Notifications\
+ * PilotApplicationSubmitted's docblock for why every notification in this
+ * app sends synchronously, matching v2's own inline-awaited email sends
+ * exactly.
  */
-class InvitationResent extends Notification implements ShouldQueue
+class InvitationResent extends Notification
 {
-    use Queueable;
-
     public function __construct(
         public readonly Invitation $invitation,
         public readonly string $organizationName,

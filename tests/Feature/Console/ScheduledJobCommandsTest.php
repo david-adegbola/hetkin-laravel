@@ -44,6 +44,18 @@ test('jobs:generate-alerts tracks a succeeded run as cron', function () {
     expect($jobRun->status)->toBe(JobRunStatus::Succeeded);
 });
 
+test('jobs:generate-alerts exits non-zero and logs on failure, without throwing (Sentry report included)', function () {
+    Log::shouldReceive('error')->once();
+    $this->mock(GenerateAlertsAction::class, function ($mock) {
+        $mock->shouldReceive('execute')->once()->andThrow(new RuntimeException('alerts blew up'));
+    });
+
+    $this->artisan('jobs:generate-alerts')->assertExitCode(1);
+
+    $jobRun = JobRun::query()->where('job_name', 'generate-alerts')->latest('started_at')->first();
+    expect($jobRun->status)->toBe(JobRunStatus::Failed);
+});
+
 test('jobs:run-verification tracks a succeeded run as cron', function () {
     $this->mock(RunVerificationAction::class, function ($mock) {
         $mock->shouldReceive('execute')->once()->andReturn(['organizationsConsidered' => 0, 'results' => []]);
@@ -54,6 +66,18 @@ test('jobs:run-verification tracks a succeeded run as cron', function () {
     $jobRun = JobRun::query()->where('job_name', 'run-verification')->latest('started_at')->first();
     expect($jobRun->triggered_by)->toBe('cron');
     expect($jobRun->status)->toBe(JobRunStatus::Succeeded);
+});
+
+test('jobs:run-verification exits non-zero and logs on failure, without throwing (Sentry report included)', function () {
+    Log::shouldReceive('error')->once();
+    $this->mock(RunVerificationAction::class, function ($mock) {
+        $mock->shouldReceive('execute')->once()->andThrow(new RuntimeException('verification blew up'));
+    });
+
+    $this->artisan('jobs:run-verification')->assertExitCode(1);
+
+    $jobRun = JobRun::query()->where('job_name', 'run-verification')->latest('started_at')->first();
+    expect($jobRun->status)->toBe(JobRunStatus::Failed);
 });
 
 test('the three jobs are scheduled matching vercel.json exactly', function () {

@@ -6,7 +6,11 @@ use App\Domain\Alerts\Actions\GenerateAlertsAction;
 use App\Domain\Jobs\Services\JobRunTracker;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Sentry\State\Scope;
 use Throwable;
+
+use function Sentry\captureException;
+use function Sentry\withScope;
 
 /**
  * Ports the Next.js app's GET/POST /api/internal/generate-alerts route
@@ -34,6 +38,14 @@ class GenerateAlertsCommand extends Command
         } catch (Throwable $e) {
             $this->error("[generate-alerts] {$e->getMessage()}");
             Log::error('[cron] generate-alerts run failed', ['exception' => $e]);
+
+            // Matches v2's own route handler exactly: `Sentry.captureException(err,
+            // { tags: { job: "generate-alerts" } })`. No-ops when SENTRY_LARAVEL_DSN
+            // is unset.
+            withScope(function (Scope $scope) use ($e): void {
+                $scope->setTag('job', 'generate-alerts');
+                captureException($e);
+            });
 
             return self::FAILURE;
         }

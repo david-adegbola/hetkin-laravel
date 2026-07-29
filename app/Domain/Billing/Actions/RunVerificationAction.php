@@ -5,6 +5,7 @@ namespace App\Domain\Billing\Actions;
 use App\Domain\Alerts\Actions\CreateAlertAction;
 use App\Domain\Alerts\Enums\AlertSeverity;
 use App\Domain\Alerts\Enums\AlertType;
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -58,6 +59,7 @@ class RunVerificationAction
         private readonly VerificationCalculationService $service,
         private readonly AuditLogService $auditLogService,
         private readonly CreateAlertAction $createAlertAction,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -189,9 +191,15 @@ class RunVerificationAction
                     ));
                 });
 
-                // Deliberately still omitted, matching a v2 feature this
-                // port hasn't built yet: the `verification_computed`
-                // PostHog event (Stage 11).
+                // Phase 1 §8 funnel: "Verified Savings" — distinctId is
+                // the org since this runs unattended (cron), not tied to
+                // any one user's session.
+                $this->postHog->capture('verification_computed', $organization->id, [
+                    'organizationId' => $organization->id,
+                    'verifiedSavingsCents' => $result->verifiedSavingsCents,
+                    'varianceFlagged' => $result->varianceFlagged,
+                ]);
+
                 if ($result->varianceFlagged) {
                     $this->createAlertAction->execute(
                         $organization->id,

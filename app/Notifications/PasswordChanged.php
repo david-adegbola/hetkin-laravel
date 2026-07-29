@@ -17,6 +17,9 @@ use Illuminate\Notifications\Notification;
  * this account signed in elsewhere when the password changed," which is
  * the detectable signal, not "which physical device" — that distinction is
  * called out explicitly in the email copy rather than overclaiming.
+ *
+ * ShouldQueue: a deliberate, tested Account Security requirement (see
+ * App\Notifications\PasswordResetRequested's docblock) — not v2 parity.
  */
 class PasswordChanged extends Notification implements ShouldQueue
 {

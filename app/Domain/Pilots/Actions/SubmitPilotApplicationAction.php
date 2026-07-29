@@ -2,6 +2,7 @@
 
 namespace App\Domain\Pilots\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -21,16 +22,13 @@ use Illuminate\Support\Facades\Notification;
  * same way password-reset-link's limiter is route-level rather than
  * Action-level in this codebase.
  *
- * Deliberately omits the PostHog `pilot_application_submitted` event
- * (Stage 11) — noted here so a future stage knows exactly what to add
- * back once that domain exists.
- *
  * @phpstan-type ValidatedInput array{company_name: string, process_type: string, estimated_annual_spend_eur: int, current_scheduling_method: string, win_condition: ?string, contact_name: string, contact_email: string, contact_phone: ?string}
  */
 class SubmitPilotApplicationAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -69,6 +67,17 @@ class SubmitPilotApplicationAction
 
         Notification::route('mail', config('mail.pilot_notification_address'))
             ->notify(new PilotApplicationSubmitted($application));
+
+        // Phase 1 §8 funnel: "Visitor → Pilot Request". distinctId is the
+        // contact's email, not a user id — no account exists yet at this
+        // stage, and using the email keeps this event linkable to the
+        // same person's later activity if they sign up with it.
+        $this->postHog->capture('pilot_application_submitted', $application->contact_email, [
+            'applicationId' => $application->id,
+            'icpScore' => $icpScore,
+            'processType' => $processType->value,
+            'estimatedAnnualSpendEur' => $input['estimated_annual_spend_eur'],
+        ]);
 
         return $application;
     }

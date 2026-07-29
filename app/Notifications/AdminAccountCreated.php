@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use App\Domain\Auth\Enums\AdminRole;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -15,11 +13,14 @@ use Illuminate\Notifications\Notification;
  * password — that's shown once in the creating admin's own UI and must be
  * relayed to the new admin out of band, "for security reasons" per v2's
  * own copy.
+ *
+ * Deliberately NOT `ShouldQueue` — see App\Notifications\
+ * PilotApplicationSubmitted's docblock for why every notification in this
+ * app sends synchronously, matching v2's own inline-awaited email sends
+ * exactly.
  */
-class AdminAccountCreated extends Notification implements ShouldQueue
+class AdminAccountCreated extends Notification
 {
-    use Queueable;
-
     public function __construct(
         public readonly string $recipientName,
         public readonly AdminRole $role,

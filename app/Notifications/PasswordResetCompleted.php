@@ -12,6 +12,9 @@ use Illuminate\Notifications\Notification;
  * successfully — confirms the change to the account owner regardless of
  * whether they were the one who actually performed it (the standard
  * "if this wasn't you, contact support" security pattern).
+ *
+ * ShouldQueue: a deliberate, tested Account Security requirement (see
+ * App\Notifications\PasswordResetRequested's docblock) — not v2 parity.
  */
 class PasswordResetCompleted extends Notification implements ShouldQueue
 {

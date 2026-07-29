@@ -3,8 +3,6 @@
 namespace App\Notifications;
 
 use App\Domain\Organizations\Models\Invitation;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -12,13 +10,15 @@ use Illuminate\Notifications\Notification;
  * Sent to the applicant once their pilot application is approved — mirrors
  * the Next.js app's sendInvitationEmail() (src/app/admin/(protected)/
  * pilots/actions.ts). `MAIL_MAILER=log` reproduces v2's own "log instead
- * of send" fallback when RESEND_API_KEY is unset; wiring a real transport
- * is Stage 11 scope.
+ * of send" fallback when RESEND_API_KEY is unset.
+ *
+ * Deliberately NOT `ShouldQueue` — see App\Notifications\
+ * PilotApplicationSubmitted's docblock for why every notification in this
+ * app sends synchronously, matching v2's own inline-awaited email sends
+ * exactly.
  */
-class PilotApplicationApproved extends Notification implements ShouldQueue
+class PilotApplicationApproved extends Notification
 {
-    use Queueable;
-
     public function __construct(
         public readonly Invitation $invitation,
         public readonly string $contactName,

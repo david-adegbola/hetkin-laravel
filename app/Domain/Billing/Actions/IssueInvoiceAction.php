@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -25,6 +26,7 @@ class IssueInvoiceAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
+        private readonly PostHogService $postHog,
     ) {}
 
     public function execute(string $invoiceId, AdminUser $adminUser): Invoice
@@ -39,7 +41,7 @@ class IssueInvoiceAction
         $issuedAt = now();
         $dueAt = $issuedAt->copy()->addDays(14);
 
-        return DB::transaction(function () use ($invoice, $adminUser, $issuedAt, $dueAt) {
+        $invoice = DB::transaction(function () use ($invoice, $adminUser, $issuedAt, $dueAt) {
             $invoice->update([
                 'status' => InvoiceStatus::Issued,
                 'issued_at' => $issuedAt,
@@ -58,5 +60,16 @@ class IssueInvoiceAction
 
             return $invoice->refresh();
         });
+
+        // Phase 1 §8 funnel: closest proxy to "verified savings reaching
+        // the customer as a real bill" — org-scoped, not user-scoped,
+        // since this is an admin action.
+        $this->postHog->capture('invoice_issued', $invoice->organization_id, [
+            'organizationId' => $invoice->organization_id,
+            'invoiceId' => $invoice->id,
+            'totalCents' => $invoice->total_cents,
+        ]);
+
+        return $invoice;
     }
 }

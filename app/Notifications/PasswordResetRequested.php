@@ -17,7 +17,16 @@ use Illuminate\Notifications\Notification;
  *
  * ShouldQueue: the request-a-reset-link response must return immediately
  * regardless of mail-provider latency (Account Security brief: "Queued
- * email notification").
+ * email notification") — a deliberate, tested requirement (see
+ * AccountSecurityNotificationsTest's "every account-security notification
+ * is queued"), not v2 parity: Account Security was an out-of-band addition
+ * ahead of Stage 2, not a straight port. A Stage 11 live smoke test found
+ * that no queue worker actually runs anywhere in this app's current dev
+ * setup (no Supervisor/systemd config, nothing in .claude/launch.json),
+ * so `QUEUE_CONNECTION=database` only persists a job row today rather than
+ * ever processing it — a real production-readiness gap, but the fix is
+ * standing up a queue worker (Stage 15 territory), not un-queuing this
+ * notification against its own tested spec.
  */
 class PasswordResetRequested extends Notification implements ShouldQueue
 {

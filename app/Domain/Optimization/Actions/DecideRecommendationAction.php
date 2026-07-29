@@ -2,6 +2,7 @@
 
 namespace App\Domain\Optimization\Actions;
 
+use App\Domain\Analytics\Services\PostHogService;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
@@ -31,15 +32,13 @@ use Illuminate\Support\Facades\DB;
  *   - PARTIAL: adopting the recommendation, but to a self-chosen time
  *     rather than exactly what was proposed. Requires an adjusted start
  *     time + duration; reason is optional context.
- *
- * Omits src/lib/analytics/server.ts's captureServerEvent (Stage 11, not
- * built) — not silently dropped, see MIGRATION_PLAN.md ADR-33.
  */
 class DecideRecommendationAction
 {
     public function __construct(
         private readonly AuditLogService $auditLogService,
         private readonly CurrentOrganization $currentOrganization,
+        private readonly PostHogService $postHog,
     ) {}
 
     /**
@@ -101,7 +100,7 @@ class DecideRecommendationAction
         $this->currentOrganization->set($organization);
 
         try {
-            return DB::transaction(function () use (
+            $created = DB::transaction(function () use (
                 $organization, $user, $recommendationId, $decision,
                 $reason, $adjustedStartAt, $adjustedEndAt,
             ) {
@@ -136,6 +135,18 @@ class DecideRecommendationAction
 
                 return $created;
             });
+
+            // Phase 1 §8 funnel: "Recommendation Acceptance" / "% of
+            // recommended shifts actually followed" — the real leading
+            // indicator of revenue, per that section's own framing, not
+            // signups or logins.
+            $this->postHog->capture('recommendation_decision', $user->id, [
+                'organizationId' => $organization->id,
+                'decision' => $decision->value,
+                'hasReason' => $reason !== null,
+            ]);
+
+            return $created;
         } finally {
             $this->currentOrganization->set($previousOrganization);
         }
