@@ -14,6 +14,7 @@ require __DIR__.'/settings.php';
 require __DIR__.'/pilots.php';
 require __DIR__.'/domains.php';
 require __DIR__.'/marketing.php';
+require __DIR__.'/pwa.php';
 
 // Mirrors the Next.js app's src/app/not-found.tsx, which Next renders
 // automatically for any unmatched path. Must stay last — Route::fallback()

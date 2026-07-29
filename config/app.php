@@ -75,6 +75,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | Purely informational — shared to the frontend as `appVersion`
+    | (App\Http\Middleware\HandleInertiaRequests) for display purposes
+    | (e.g. a support/debug "which build is this" indicator). NOT what
+    | drives PWA update detection (MIGRATION_PLAN.md Stage 14) — that's the
+    | browser's own native Service Worker install/waiting lifecycle
+    | (resources/js/lib/pwa.ts), which reacts to the SW script's bytes
+    | actually changing and needs no version string to compare. Keeping
+    | those two concerns separate avoids a real failure mode: a value
+    | computed independently at JS build time vs. PHP request time can
+    | silently disagree the moment a deploy ships built assets from a
+    | slimmer runtime image without `.git` — see docs/pwa.md. The
+    | `shell_exec` git fallback is therefore LOCAL-only; production should
+    | set APP_VERSION explicitly (e.g. from CI's commit SHA), or this
+    | reads the obviously-a-placeholder 'dev' rather than silently guessing.
+    |
+    | Reads APP_ENV directly via env() rather than app()->environment() —
+    | config files load before the container's environment detection is
+    | safely callable this early in the boot sequence.
+    |
+    */
+
+    'version' => env('APP_VERSION') ?: (
+        env('APP_ENV', 'production') === 'local'
+            ? trim((string) @shell_exec('git rev-parse --short HEAD 2>/dev/null'))
+            : null
+    ) ?: 'dev',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

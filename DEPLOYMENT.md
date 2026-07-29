@@ -187,6 +187,15 @@ registrar).
    (server) and `VITE_POSTHOG_KEY` (client — same value, just also
    needs the `VITE_` prefix so Vite bundles it into the browser build).
 
+### Progressive Web App — `APP_VERSION` (optional, but recommended)
+
+Set `APP_VERSION` to your CI's git commit SHA on every deploy. It's
+purely informational (a "which build is this" value) — the app runs
+identically without it, falling back to the literal string `dev` — but
+setting it is what makes that value actually meaningful in production.
+See [PWA.md](PWA.md) for the full reasoning and why it's deliberately
+**not** wired into update detection itself.
+
 ### Error tracking — Sentry (optional)
 
 1. Sign up at [sentry.io](https://sentry.io), create a project (or one
@@ -238,3 +247,9 @@ php artisan view:cache
 - [ ] Sign in as both a customer and an admin account on the live URL
       end to end, same as the [README.md](README.md#test-accounts)
       local checklist
+- [ ] `APP_VERSION` set to this deploy's commit SHA (see
+      [PWA.md](PWA.md#versioning--deliberately-not-what-drives-update-detection))
+- [ ] Signed into the portal, confirm the browser offers to install it
+      (or Chrome DevTools → Application → Manifest shows no errors); repeat
+      for the admin console — confirm the two install as separate apps,
+      not one covering both, and that the marketing site never does

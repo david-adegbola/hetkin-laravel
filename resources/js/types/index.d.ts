@@ -48,6 +48,8 @@ export type PageProps<
     subdomain: {
         isDashboardHost: boolean;
         isAdminHost: boolean;
+        /** See App\Support\PwaSurface and resources/js/lib/pwa.ts (Stage 14). */
+        surface: 'marketing' | 'portal' | 'admin';
     };
     organization?: PortalOrganization;
     /**
@@ -60,4 +62,6 @@ export type PageProps<
             message: string;
         } | null;
     };
+    /** See config/app.php's `version` key and resources/js/lib/pwa.ts (Stage 14). */
+    appVersion: string;
 };

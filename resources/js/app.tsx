@@ -2,6 +2,8 @@ import '../css/app.css';
 import './bootstrap';
 
 import { ErrorBoundary } from '@/Components/ErrorBoundary';
+import { syncPwaForPage } from '@/lib/pwa';
+import type { PageProps } from '@/types';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
@@ -10,6 +12,17 @@ import { initSentry } from './lib/sentry';
 
 initSentry();
 initPostHog();
+
+// MIGRATION_PLAN.md Stage 14 — re-synced on EVERY Inertia navigation, not
+// just once here at boot. Inertia never re-renders resources/views/
+// app.blade.php's <head> after the first full page load, so relying only
+// on the initial window.__PWA__ value would leave the manifest link (and
+// install eligibility) stuck at whatever it was on that first load — never
+// appearing after an in-app login, never disappearing after an in-app
+// sign-out. See resources/js/lib/pwa.ts's docblock for the full reasoning.
+router.on('navigate', (event) => {
+    syncPwaForPage(event.detail.page.props as unknown as PageProps);
+});
 
 // Complements App\Http\Middleware\PreventBackHistoryCache (which stops a
 // page from being cached in the FIRST place) with a fallback for the rare

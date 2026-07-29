@@ -1,0 +1,28 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+    <!--
+        PWA icon source — a standalone, rasterizable copy of the same 4
+        paths as resources/js/Components/Logo.tsx's LogoMark (MIGRATION_
+        PLAN.md Stage 14). Kept as a separate file, with a hardcoded fill
+        instead of `currentColor`, because a rasterized PNG app icon can't
+        follow a CSS custom property the way the live JSX component does.
+        #0f172a matches resources/css/app.css's color-primary token exactly.
+        Regenerate public/icons/icon-*.png from this file (via ImageMagick)
+        if the mark itself ever changes — see docs/pwa.md.
+    -->
+    <path
+        d="M107.42,73.4h123.21c5.52,0,10,4.48,10,10v123.21c0,13.8-11.2,25-25,25h-123.21c-5.52,0-10-4.48-10-10v-123.21c0-13.8,11.2-25,25-25Z"
+        fill="#0f172a"
+    />
+    <path
+        d="M341.68,75.3h-41.02c-16.18,0-29.3,13.12-29.3,29.3v86.43h50.56v65.92h78.36c16.18,0,29.3-13.12,29.3-29.3v-64.46c0-48.54-39.35-87.89-87.89-87.89Z"
+        fill="#0f172a"
+    />
+    <path
+        d="M190.08,256.95h-19.76c-48.54,0-87.89,39.35-87.89,87.89v64.46c0,16.18,13.12,29.3,29.3,29.3h99.61c16.18,0,29.3-13.12,29.3-29.3v-86.43h-50.56v-65.92Z"
+        fill="#0f172a"
+    />
+    <path
+        d="M341.68,280.39h-19.76v42.48h-50.56v86.43c0,16.18,13.12,29.3,29.3,29.3h99.61c16.18,0,29.3-13.12,29.3-29.3v-41.02c0-48.54-39.35-87.89-87.89-87.89Z"
+        fill="#0f172a"
+    />
+</svg>

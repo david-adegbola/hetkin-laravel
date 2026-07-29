@@ -16,5 +16,11 @@
             "ziggy-js": ["./vendor/tightenco/ziggy"]
         }
     },
-    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"]
+    "include": ["resources/js/**/*.ts", "resources/js/**/*.tsx", "resources/js/**/*.d.ts"],
+    "exclude": [
+        "node_modules",
+        "resources/js/sw-portal.ts",
+        "resources/js/sw-admin.ts",
+        "resources/js/service-worker/**/*"
+    ]
 }

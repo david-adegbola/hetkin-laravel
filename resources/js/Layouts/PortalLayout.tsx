@@ -1,5 +1,7 @@
 import { Logo } from '@/Components/Logo';
 import NavLink from '@/Components/portal/NavLink';
+import { InstallPwaButton } from '@/Components/pwa/InstallPwaButton';
+import { PwaUpdateBanner } from '@/Components/pwa/PwaUpdateBanner';
 import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
@@ -202,21 +204,29 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
                         {item.label}
                     </NavLink>
                 ))}
-                {organization && (
-                    <div className="border-border text-text-secondary mt-auto border-t px-3 py-3 text-xs">
-                        {organization.name}
-                        <br />
-                        {organization.status === 'PILOT'
-                            ? 'Pilot'
-                            : organization.status}
-                        {organization.process_type
-                            ? ` · ${PROCESS_TYPE_LABELS[organization.process_type]}`
-                            : ''}
-                    </div>
-                )}
+                <div className="mt-auto flex flex-col gap-3 px-1">
+                    <InstallPwaButton surface="portal" />
+                    {organization && (
+                        <div className="border-border text-text-secondary border-t px-2 py-3 text-xs">
+                            {organization.name}
+                            <br />
+                            {organization.status === 'PILOT'
+                                ? 'Pilot'
+                                : organization.status}
+                            {organization.process_type
+                                ? ` · ${PROCESS_TYPE_LABELS[organization.process_type]}`
+                                : ''}
+                        </div>
+                    )}
+                </div>
             </aside>
 
-            <main className="px-4 py-6 pb-12 md:px-8">{children}</main>
+            <div className="flex flex-col">
+                <main className="flex-1 px-4 py-6 pb-12 md:px-8">
+                    {children}
+                </main>
+                <PwaUpdateBanner />
+            </div>
         </div>
     );
 }

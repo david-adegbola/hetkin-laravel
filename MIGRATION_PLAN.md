@@ -78,6 +78,7 @@ review) — building it earlier would mean building it twice.
 | New Feature: Labour-Aware Shiftable Load Classification | **Complete** | ADR-86..ADR-91. New product scope (no v2 equivalent) — `labour_classification` on ScheduleBlock, conservative default, filters the recommendation pipeline only. |
 | Platform audit: Labour Classification consistency | **Complete** | ADR-92..ADR-95. Marketing/docs copy corrected in 4 places; every Recommendation-derived surface confirmed already correct by construction. |
 | 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
+| 14. Progressive Web Application (PWA) | **Complete** | ADR-103..ADR-109. Customer portal and admin console each install as independent PWAs (own manifest/scope/icons/cache); hand-rolled classic-script Service Worker allow-lists only static assets, never protected content; install eligibility gated server-side (`PwaSurface`) and kept correct across in-app SPA navigation. Three bugs caught by design review before implementation, a fourth (SPA-navigation sync) found via live browser testing — see [PWA.md](PWA.md). |
 
 ## Architecture Decisions
 
@@ -2998,6 +2999,198 @@ Stage 14 is complete when:
 - offline experience is implemented
 - security guarantees remain unchanged
 - documentation is complete
+
+### Execution Log
+
+Planned via a design-review pass (a Plan agent pressure-tested the initial
+draft) before any code changed, given the size and cross-cutting nature
+of the feature (new PHP routes/middleware/config, a new build pipeline
+for the Service Worker, versioning spanning both PHP and JS, new tests,
+documentation). That review caught three real bugs before they shipped —
+see ADR-105 — and manual browser testing after implementation caught a
+fourth, more subtle one not visible from source reading alone — see
+ADR-107. See [PWA.md](PWA.md) for the practical "how it works, how to
+touch it" reference; this log is the decision history.
+
+### ADR-103: One shared surface-detection helper, not host-checking logic duplicated across three call sites
+
+`App\Support\PwaSurface` determines which of the three app surfaces
+(marketing/portal/admin) a request belongs to, using the exact same
+"check the real subdomain host, else check the `/dashboard` or `/admin`
+path prefix" logic `bootstrap/app.php`'s `redirectGuestsTo`/
+`redirectUsersTo` closures already used, and the same unconstrained-route
+reasoning `routes/settings.php` already established (both cited as
+precedent in the class's own docblock — this is not a novel pattern).
+`App\Http\Middleware\HandleInertiaRequests` was refactored to delegate
+its existing `isDashboardHost`/`isAdminHost` booleans to this helper
+(identical output values, just de-duplicated) rather than left as a
+fourth independent copy. Reused by the manifest/Service-Worker controller
+and the `app.blade.php` install-eligibility gate — host/path detection
+logic exists in exactly one place, not three or four.
+
+### ADR-104: Manifests and Service Workers are Laravel routes, not static `public/` files
+
+`routes/pwa.php` registers `GET /manifest-portal.webmanifest`,
+`/manifest-admin.webmanifest`, `/sw-portal.js`, `/sw-admin.js` with no
+`domain()` constraint, so one route answers correctly whichever way a
+visitor reaches it (real subdomain or main-domain path prefix) —
+`App\Http\Controllers\PwaController` computes the correct
+`start_url`/`scope`/`id` per request via `PwaSurface`. The Service Worker
+routes specifically need to be server-routed rather than plain static
+files so `Cache-Control: no-cache` can be set explicitly on them — left
+to a hosting platform's static-file defaults, a long `max-age` could
+delay the browser's ~24h update byte-comparison check well past what
+`usePwaUpdate()`'s polling assumes.
+
+### ADR-105: Three real bugs the design-review pass caught before implementation, and why the fixes are what they are
+
+- **A second Vite config for the Service Worker would have deleted
+  `public/`.** The original draft planned to bundle `sw-core.ts` via a
+  separate `vite.config.sw.js` targeting `public/` directly — Vite's
+  default `emptyOutDir: true` would wipe the *entire* `public/`
+  directory, including `index.php`, on every build. Fixed by dropping the
+  bundler for the Service Worker entirely: `resources/js/service-worker/
+  sw-core.ts` and the two tiny per-surface entry files
+  (`sw-portal.ts`/`sw-admin.ts`) compile via plain `tsc` (two dedicated
+  configs — see ADR-106) into classic, non-module scripts, consistent
+  with this codebase's established hand-rolled-over-dependency posture.
+- **A version string baked in at JS build time vs. read at PHP request
+  time can silently disagree in a real deploy.** The original draft's
+  versioning scheme computed `git rev-parse` independently on both the
+  Vite build side and the PHP config side; the review flagged that a
+  production runtime container commonly ships built assets without
+  `.git` (or even a `git` binary), meaning the two sides could drift
+  apart with no error, just silent disagreement. Fixed by dropping the
+  mechanism that needed synchronizing at all: `config('app.version')` is
+  purely informational (a "which build" display value, `env('APP_VERSION')`
+  with a git fallback restricted to `local` only — see `config/app.php`'s
+  docblock), and PWA update *detection* uses the browser's native Service
+  Worker byte-diffing instead of any version-string comparison, which has
+  no such failure mode and needed nothing baked in at build time to begin
+  with.
+- **Hiding the React install button doesn't suppress the browser's own
+  native install icon.** Chrome/Edge's install affordance is driven
+  purely by "a manifest is linked and a Service Worker controls this
+  page" — true regardless of whether `InstallPwaButton.tsx` renders
+  anything. Fixed by moving the actual gate server-side into
+  `app.blade.php` (§ install eligibility below) rather than treating the
+  React component as the security boundary.
+
+### ADR-106: The Service Worker is hand-rolled, classic (non-module) scripts — two more real compiler bugs found and fixed during implementation, beyond what the design review caught
+
+Building on ADR-105's "no bundler" decision: `resources/js/service-worker/
+cache-policy.ts` (the pure, allow-list `shouldCache()` function) and
+`sw-core.ts` (install/activate/fetch/push handlers) compile via two
+dedicated configs, `tsconfig.sw-portal.json` / `tsconfig.sw-admin.json`
+(`module: "none"`), into plain global-scope `.js` under `public/`. Two
+problems only surfaced once actually compiling and inspecting the output,
+not from source review alone:
+
+- **`module: "none"` still emits a broken CommonJS wrapper for a file
+  that uses `export`.** `cache-policy.ts` originally exported
+  `shouldCache` (for a clean Node import in its own test); compiling it
+  produced `Object.defineProperty(exports, "__esModule", ...)` —
+  referencing a global `exports` object that doesn't exist in a Service
+  Worker, which would throw `ReferenceError` as the very first thing the
+  worker does. Fixed by making it a genuinely plain global function, no
+  `export` at all; `cache-policy.test.ts` loads the **compiled** output
+  via `node:vm` instead (see ADR-108), which also means the test
+  exercises the exact artifact that ships, not a parallel hand-written
+  copy that could drift from it.
+- **A `const`/`let` "forward declaration" for a value defined in another
+  file genuinely conflicts, even though the two never coexist at
+  runtime.** `sw-core.ts` needs `SURFACE` (set by whichever of
+  `sw-portal.ts`/`sw-admin.ts` `importScripts()`-ed it in); an initial
+  `declare const SURFACE` collided with the entry file's real
+  declaration the moment both were compiled together to type-check
+  cross-file references. Fixed two ways: switched to `declare var
+  SURFACE` (the one declaration form JS — and TypeScript, matching it —
+  allows to redeclare across files sharing a global scope), and split
+  into two separate tsconfigs rather than one compiling both entry points
+  together, since `sw-portal.ts` and `sw-admin.ts` each declare their own
+  real `var SURFACE` and were never meant to be type-checked as one
+  combined global scope in the first place.
+
+`resources/js/service-worker/service-worker.d.ts` hand-declares the
+handful of Service-Worker-specific types (`ServiceWorkerGlobalScope`,
+`FetchEvent`, `ExtendableEvent`, `Clients`) that TypeScript's built-in
+`webworker` lib doesn't ship — a long-standing gap in TypeScript's
+standard library, not a local oversight, confirmed by the exact
+`self`/`caches`/`skipWaiting` "not defined" errors produced without it.
+
+### ADR-107: A fourth bug, found only by testing the actual login flow live in the browser — the install gate worked at the HTTP layer but not across an in-app SPA transition
+
+`app.blade.php`'s server-side gate (ADR-105's fix for the native-icon
+problem) was verified correct via `curl` and via `tests/Feature/
+PwaManifestTest.php` — both confirmed the manifest link and `window.__PWA__`
+appear exactly when authenticated on the matching surface. Manually
+clicking through an actual login in the Browser pane, on the
+`admin.localhost` subdomain, showed the manifest link and Service Worker
+registration **still absent after a successful login** — the automated
+Pest test had exercised `route('admin.overview')`, which resolves to the
+main-domain path-prefix mode, never the subdomain path this specific
+manual check used, so the gap wasn't caught by the existing coverage.
+
+Root cause: Inertia is an SPA. After the very first full page load, it
+never re-renders `app.blade.php`'s `<head>` again — a login form submit
+is handled as a client-side XHR navigation, not a full browser reload, so
+the manifest link computed once on the (unauthenticated) sign-in page
+never updated. The mirror-image bug existed on sign-out too: a manifest
+added pre-logout stayed present after an in-app sign-out, until reload.
+Neither direction is a security hole (the server-rendered HTML for any
+*fresh* request was always correct — confirmed again after the fix), but
+both meant install eligibility didn't reliably track the visitor's actual
+session state during ordinary in-app use.
+
+Fixed by adding `resources/js/lib/pwa.ts`'s `syncPwaForPage()`, called
+from `app.tsx` on every Inertia `navigate` event, not just once at boot —
+it re-derives the same surface/auth check from the page props Inertia
+already shares on every navigation and adds/removes the manifest
+`<link>` + registers the Service Worker imperatively as needed. No
+independent host-detection logic: it reads the same
+`subdomain.isDashboardHost`/`isAdminHost` booleans `PwaSurface` already
+computed server-side, applying only the trivial scope mapping to them.
+Re-verified live in the browser after the fix, both directions (in-app
+login → manifest/registration appear; in-app sign-out → manifest
+disappears), on the admin subdomain specifically since that's what
+exposed the gap.
+
+### ADR-108: Test coverage split by what each tool can actually verify
+
+`tests/Feature/PwaManifestTest.php` / `ServiceWorkerTest.php` (Pest, same
+house style as the rest of this suite) cover manifest JSON content across
+all four host/path combinations, Service Worker response headers, and —
+the actual regression test for ADR-105's native-icon fix — that the
+manifest link and `window.__PWA__` are present only for an authenticated
+visitor on the matching surface, absent for a signed-out visitor and for
+the marketing site. `resources/js/service-worker/cache-policy.test.ts`
+unit-tests the `shouldCache()` allow-list — the highest-risk logic for
+"protected content is never cached" — via Node's native TypeScript
+support (`npm run test:js`, zero new test-framework dependency; this repo
+is otherwise Pest-only), loading the compiled output via `node:vm` per
+ADR-106. This closes a gap the design review explicitly flagged: zero
+existing JS test infrastructure in this repo, which would otherwise have
+left the riskiest logic with no automated coverage at all. What neither
+tool can verify — the actual install flow, offline fallback rendering,
+the update banner, and ADR-107's SPA-navigation sync — was verified live
+in the Browser pane instead, not just asserted from source reading.
+
+### ADR-109: Validation
+
+Full suite: 527/527 passing (1,775 assertions, up from 515/1,737 before
+this stage). `tsc --noEmit`, ESLint, and Pint all clean. PHPStan: 0 errors
+against the Stage 13 baseline — no new findings. `npm run test:js`: 6/6.
+`npm run build` (now also running the two Service Worker `tsc` compiles)
+succeeds without touching anything else in `public/`. Live-verified in
+the Browser pane on both `dashboard.localhost`/`admin.localhost`
+(subdomain mode): manifest content and icons correct for both portals;
+Cache Storage after normal browsing contains only `/build/assets/*`,
+`/icons/*`, and the manifest — zero page/XHR/API responses, the actual
+proof behind "protected content is never cached"; the two portals'
+Service Worker registrations and caches are fully independent; the
+marketing site never links a manifest or registers a worker regardless
+of auth state; and, after ADR-107's fix, install eligibility tracks an
+in-app login/logout correctly without requiring a hard reload.
 
 ---
 

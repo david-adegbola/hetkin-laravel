@@ -3,9 +3,11 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "tsc && vite build",
+        "build": "tsc && vite build && npm run build:sw",
+        "build:sw": "tsc -p tsconfig.sw-portal.json && tsc -p tsconfig.sw-admin.json",
         "dev": "vite",
-        "lint": "eslint resources/js --fix"
+        "lint": "eslint resources/js --fix",
+        "test:js": "npm run build:sw && node --test resources/js/service-worker/*.test.ts"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.5",

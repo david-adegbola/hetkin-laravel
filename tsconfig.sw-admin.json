@@ -1,0 +1,20 @@
+// Admin console's Service Worker compile — see tsconfig.sw-portal.json's
+// docblock, same reasoning, only the entry file differs.
+{
+    "compilerOptions": {
+        "module": "none",
+        "target": "es2020",
+        "lib": ["webworker", "es2020"],
+        "strict": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "rootDir": "resources/js",
+        "outDir": "public"
+    },
+    "files": [
+        "resources/js/service-worker/service-worker.d.ts",
+        "resources/js/service-worker/cache-policy.ts",
+        "resources/js/service-worker/sw-core.ts",
+        "resources/js/sw-admin.ts"
+    ]
+}

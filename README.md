@@ -203,6 +203,14 @@ of them is a documented no-op when unconfigured:
 | Sentry (error tracking) | `SENTRY_LARAVEL_DSN`, `VITE_SENTRY_DSN` | No-op, no network calls |
 | ENTSO-E (day-ahead prices) | `ENTSO_E_TOKEN` | Price-ingestion job fails closed with a clear error, rather than silently doing nothing |
 
+## Progressive Web App
+
+The customer portal and admin console are each independently installable
+— see [PWA.md](PWA.md) for how the manifests, Service Workers, caching
+policy, and update flow work, and how to rebuild the Service Worker
+locally after touching it (`npm run build:sw`, not covered by `npm run
+dev`'s hot reload).
+
 ## Project structure
 
 Domain-driven, under `app/Domain/{Analytics,Alerts,Pricing,Auth,Audit,

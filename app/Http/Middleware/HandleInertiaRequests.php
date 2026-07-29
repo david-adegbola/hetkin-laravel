@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\PwaSurface;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,10 +49,26 @@ class HandleInertiaRequests extends Middleware
             // than read from window.location client-side, since Inertia has
             // no Server/Client component split for this to live in the way
             // v2's subdomain-server.ts vs subdomain-client.ts did.
+            //
+            // `surface` (Stage 14) is which of the three app surfaces this
+            // request belongs to — 'marketing' | 'portal' | 'admin',
+            // computed by App\Support\PwaSurface from BOTH the host check
+            // above and the /dashboard, /admin path-prefix fallback, since
+            // isDashboardHost/isAdminHost alone can't tell "on the main
+            // domain viewing /dashboard/*" apart from "on the main domain
+            // viewing the marketing site". Used by the PWA install button
+            // to know which portal it's rendering inside.
             'subdomain' => [
-                'isDashboardHost' => $request->getHost() === 'dashboard.'.config('app.domain'),
-                'isAdminHost' => $request->getHost() === 'admin.'.config('app.domain'),
+                'isDashboardHost' => PwaSurface::isPortalHost($request),
+                'isAdminHost' => PwaSurface::isAdminHost($request),
+                'surface' => PwaSurface::current($request),
             ],
+            // Stage 14 — read by resources/js/lib/pwa.ts's update-detection
+            // hook to compare against a freshly-fetched manifest response
+            // and by the update-available banner's copy. See
+            // config/app.php's `version` key for how this is derived and
+            // why the two sides can't drift.
+            'appVersion' => config('app.version'),
             // One-time flash data. `created_admin` is App\Http\Controllers\
             // Admin\TeamController::store()'s temp-password display, which
             // mirrors v2's CreateAdminUserForm.tsx showing the password

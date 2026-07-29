@@ -19,6 +19,9 @@
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
+/public/sw-portal.js
+/public/sw-admin.js
+/public/service-worker
 /public/storage
 /storage/*.key
 /storage/pail

@@ -1,0 +1,30 @@
+// Compiles the customer portal's Service Worker (MIGRATION_PLAN.md Stage
+// 14) as a classic, non-module script — see resources/js/sw-portal.ts's
+// docblock for why (Firefox has no module-SW support at all; Safari only
+// gained it in 16.4). Deliberately a SEPARATE config from
+// tsconfig.sw-admin.json, not one config compiling both entry points
+// together: sw-portal.ts and sw-admin.ts each declare a top-level `const
+// SURFACE`, and since neither file is a module, a single shared
+// compilation would see both simultaneously in one global scope and reject
+// it as a genuine redeclaration — even though the two never actually
+// coexist at runtime (a browser only ever loads one or the other into a
+// given Service Worker registration). package.json's `build` script runs
+// this and tsconfig.sw-admin.json as two separate `tsc -p` invocations.
+{
+    "compilerOptions": {
+        "module": "none",
+        "target": "es2020",
+        "lib": ["webworker", "es2020"],
+        "strict": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "rootDir": "resources/js",
+        "outDir": "public"
+    },
+    "files": [
+        "resources/js/service-worker/service-worker.d.ts",
+        "resources/js/service-worker/cache-policy.ts",
+        "resources/js/service-worker/sw-core.ts",
+        "resources/js/sw-portal.ts"
+    ]
+}

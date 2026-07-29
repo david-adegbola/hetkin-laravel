@@ -1,4 +1,6 @@
 import { Logo } from '@/Components/Logo';
+import { InstallPwaButton } from '@/Components/pwa/InstallPwaButton';
+import { PwaUpdateBanner } from '@/Components/pwa/PwaUpdateBanner';
 import { Button } from '@/Components/ui/Button';
 import { useAdminBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
@@ -64,6 +66,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                         );
                     })}
                 </div>
+                <InstallPwaButton surface="admin" />
                 {admin && (
                     <div className="text-text-secondary flex items-center gap-3 text-xs">
                         <span>
@@ -81,6 +84,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 )}
             </nav>
             <div className="p-8">{children}</div>
+            <PwaUpdateBanner />
         </div>
     );
 }
