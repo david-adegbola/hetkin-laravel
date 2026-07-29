@@ -2465,6 +2465,110 @@ optimization yet" — proving the Unmanned block was correctly accepted
 as a candidate and the pipeline proceeded past the eligibility check to
 the next real validation step, live, not just in the test suite.
 
+## Post-Stage-12: Labour Classification Platform-Wide Consistency Audit
+
+### Objective
+
+ADR-86 through ADR-91 built Labour Classification as a domain concept
+and a single centralized eligibility gate
+(`ScheduleBlock::isEligibleForOptimization()`), but building the gate
+doesn't by itself guarantee every downstream surface — marketing copy,
+docs, reports, the recommendation engine, admin views — actually
+reflects the new rule that only Unmanned blocks are eligible for
+customer-facing optimization. This audit traced the concept's full data
+flow end to end (backend Actions/DTOs/models, the reports view-model
+and its PDF/web consumers, the dashboard controller, marketing pages,
+customer and internal docs) to find any remaining claim, calculation,
+or piece of copy that still assumes every block is recommendable.
+
+### ADR-92: Confirmed correct-by-construction — every `Recommendation`-derived surface, with nothing to fix
+
+Because `RunOptimizationAction` is the single upstream point where
+`Recommendation` rows get created (ADR-88), every downstream consumer
+of `Recommendation` data — `SavingsReportViewModelBuilder`'s
+`recommended`/`recommendations`/`callouts` fields, `ReportDetail.tsx`'s
+"Recommended schedule" and "Recommendation Summary" sections, the
+`NEW_OPPORTUNITY` alert, and `DashboardController`'s recent-
+recommendations panel — is already Unmanned-only, transitively, with no
+per-surface filter needed. `SavingsReportViewModelBuilder`'s `current`
+schedule bars intentionally include every block regardless of
+classification: that section renders the customer's real, actual
+schedule, not an optimization claim, so showing Labour Bound blocks
+there is correct, not a gap. `ApplyDecisionsToNewScheduleVersionAction`
+copies every block forward into the new schedule version (correct — it
+reconstructs the whole schedule) but only overrides start/end times
+where a `RecommendationDecision` exists, which by construction can only
+exist for a block that generated a Recommendation in the first place.
+The MTD/YTD/ROI figures on `SavingsAssessment`/`VerificationRecord`
+(ADR-89) remain unfiltered by design — they're computed from aggregate
+meter readings against day-ahead prices, with no per-block breakdown to
+filter in the first place. No REST/API layer exists in this app (all
+data flows through Inertia responses), and no AI/ML classification
+logic exists anywhere (`labour_classification` is a plain manual select
+field) — both named as audit areas in the source brief, both confirmed
+not applicable to this codebase's actual architecture rather than
+built to satisfy the checklist.
+
+### ADR-93: Four marketing/docs copy sites predated the feature and overclaimed eligibility in kWh-only terms — corrected without naming the internal enum on customer-facing pages
+
+`Methodology.tsx`, `Docs.tsx` (customer-facing), and `Beta.tsx` each had
+prose written before Labour Classification existed, describing
+recommendation eligibility as gated only by having an estimated kWh
+figure — now factually incomplete, since an Unmanned classification is
+equally required:
+
+- `Methodology.tsx` STAGES[1].body: "each flexible production block" →
+  "each block that can actually move — production that runs unmanned,
+  not work tied to when someone's on shift".
+- `Docs.tsx` PAGES "Schedule" body: "That kWh figure is what makes a
+  block eligible for optimization at all" → now names both the kWh
+  figure and the unmanned/staffed-shift distinction as joint
+  requirements.
+- `Docs.tsx` GLOSSARY "Recommendation" body: "a specific, flexible
+  production block" → "a specific production block — one that runs
+  unmanned, so moving it doesn't mean changing when anyone works".
+- `Beta.tsx` PORTAL_SECTIONS "Schedule" body: same kWh-only-eligibility
+  claim, corrected the same way.
+
+Per the audit brief's own instruction, copy uses plain operational
+language ("runs unmanned", "needs someone on shift") rather than naming
+the `LabourClassification` enum's internal case names on public pages.
+A grep sweep across `app/`, `resources/js/`, and `resources/views/` for
+the brief's full term list ("shiftable", "flexible", "optimisable",
+"recommendable", "eligible", "savings", "opportunity") turned up no
+further overclaiming instances: `Home.tsx`, `FaqAccordion.tsx`,
+`HowItWorks.tsx`, `Pricing.tsx`, `Trust.tsx`, and `Admin/Docs.tsx` were
+each read in full and confirmed either unrelated (invoice
+traceability, tenant isolation, audit-log completeness, pilot ICP
+process-flexibility scoring — a company-level fit score, not a
+per-block eligibility claim) or already accurate.
+
+### ADR-94: No Admin UI or new documentation content added — visibility gaps that predate this feature, not introduced by it
+
+Admin has zero `ScheduleBlock` visibility anywhere (`grep` across
+`app/Http/Controllers/Admin` and `resources/js/Pages/Admin` returned no
+hits) — a pre-existing scope boundary from Stage 9, not a regression
+from Labour Classification, and building one would be new functionality
+the audit brief explicitly put out of scope ("your task is not to build
+new functionality"). Similarly, `Admin/Docs.tsx`'s GLOSSARY has no
+entry for Recommendation/ScheduleBlock/Optimization at all — a
+pre-existing documentation gap, left alone for the same reason.
+
+### ADR-95: Validation
+
+No behavioral code changed — every fix in ADR-93 is customer-facing
+copy only, since the eligibility logic itself (ADR-88) was already
+correct and already covered by `ScheduleBlockEligibilityTest` and
+`RunOptimizationActionTest`'s existing regression coverage (a
+labour-bound block in the cheapest-vs-most-expensive-hour scenario).
+Full suite: 512/512 passing, unchanged from ADR-91 (no test file
+touched). `tsc --noEmit`, ESLint (`--fix` applied for two
+prettier-quote-style violations introduced by the edits), and Pint all
+clean; `vite build` succeeded. Live smoke test at `localhost:8123`
+against `/methodology`, `/docs`, and `/beta`: all three pages render
+the corrected copy exactly as written, confirmed via rendered page
+text, not just source diffs.
+
 ---
 
 # Post-Migration

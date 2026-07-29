@@ -23,7 +23,7 @@ const STAGES = [
     {
         n: 2,
         title: 'Recommendations — same-day, delivery-risk labeled',
-        body: "We look for a cheaper window on the same calendar day as each flexible production block, with the same duration — never suggesting a shift that risks a delivery date. Every recommendation shows its projected savings and a delivery-risk rating (low / medium / high) side by side, so you're weighing the trade-off, not taking it on faith.",
+        body: "We look for a cheaper window on the same calendar day for each block that can actually move — production that runs unmanned, not work tied to when someone's on shift — with the same duration, never suggesting a shift that risks a delivery date. Every recommendation shows its projected savings and a delivery-risk rating (low / medium / high) side by side, so you're weighing the trade-off, not taking it on faith.",
     },
     {
         n: 3,

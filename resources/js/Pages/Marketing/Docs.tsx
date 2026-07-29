@@ -18,7 +18,7 @@ const PAGES = [
     },
     {
         name: 'Schedule',
-        body: 'Where production runs are entered — one block at a time, by hand. Each block needs an asset or line name, a start time, an end time, and an estimated energy use in kWh. That kWh figure is what makes a block eligible for optimization at all; a block without one is recorded but never considered for a recommendation. Once you\'ve entered a few blocks, "Run optimization" checks each one for a cheaper same-day window. Past schedule versions are kept and shown read-only — nothing is ever silently overwritten.',
+        body: "Where production runs are entered — one block at a time, by hand. Each block needs an asset or line name, a start time, an end time, an estimated energy use in kWh, and whether it runs unmanned or needs someone on shift. Only unmanned blocks with a kWh figure are ever considered for a recommendation — a block missing either is recorded and kept in the schedule, but never proposed for a shift, since work tied to a staffed shift isn't something we'll suggest moving. Once you've entered a few blocks, \"Run optimization\" checks each eligible one for a cheaper same-day window. Past schedule versions are kept and shown read-only — nothing is ever silently overwritten.",
     },
     {
         name: 'Data',
@@ -53,7 +53,7 @@ const GLOSSARY = [
     },
     {
         term: 'Recommendation',
-        body: 'A suggestion to shift a specific, flexible production block to a cheaper same-day window, shown with its projected savings and a delivery-risk rating.',
+        body: "A suggestion to shift a specific production block — one that runs unmanned, so moving it doesn't mean changing when anyone works — to a cheaper same-day window, shown with its projected savings and a delivery-risk rating.",
     },
     {
         term: 'Recommendation Decision',

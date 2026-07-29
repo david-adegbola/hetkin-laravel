@@ -31,7 +31,7 @@ const PORTAL_SECTIONS = [
     },
     {
         name: 'Schedule',
-        body: 'Where you enter production runs. Fill in an asset/line name, start and end time, and — this part matters — estimated energy use in kWh. Without a kWh figure, that block can’t be considered for optimization at all. Add a few blocks, then click “Run optimization” to see if a cheaper time window exists for any of them.',
+        body: 'Where you enter production runs. Fill in an asset/line name, start and end time, estimated energy use in kWh, and whether the block runs unmanned or needs someone on shift — this part matters — only unmanned blocks with a kWh figure get considered for optimization. Add a few blocks, then click “Run optimization” to see if a cheaper time window exists for any of them.',
     },
     {
         name: 'Data',
