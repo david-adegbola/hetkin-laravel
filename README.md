@@ -1,58 +1,214 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Hetkin (Laravel)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Hetkin helps manufacturing companies shift flexible production to cheaper
+electricity hours. This repository is a from-scratch rewrite of the
+original Next.js app (`hetkin-v2`) onto Laravel — same behavior, same
+URLs, same product, new stack. See [MIGRATION_PLAN.md](MIGRATION_PLAN.md)
+for the full staged plan and the architecture decision record (ADR) log
+behind every non-obvious choice made along the way.
 
-## About Laravel
+**Status:** Stages 1–12 (the full migration) are complete and verified —
+487 passing tests, clean `tsc`/ESLint/Pint, a clean production build.
+Stage 13 (post-migration technical modernization) has not started.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Backend:** Laravel 12, PHP 8.3+, PostgreSQL
+- **Frontend:** Inertia.js, React 19, TypeScript, Tailwind CSS 4
+- **Testing:** Pest
+- **Build:** Vite
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Requirements
 
-## Learning Laravel
+- PHP 8.3+ with the usual Laravel extensions (`pdo_pgsql`, `mbstring`,
+  `openssl`, etc.)
+- [Composer](https://getcomposer.org)
+- Node 20+ and npm
+- PostgreSQL (recommended — matches production) **or** nothing extra at
+  all if you use SQLite instead (see below)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+No Redis, Memcached, or other services are required — sessions, cache,
+and the queue all use the `database` driver locally.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Setup
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <this-repo>
+cd hetkin-laravel
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Database
 
-## Contributing
+`.env.example` defaults to SQLite, which needs no setup at all:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+touch database/database.sqlite
+```
 
-## Code of Conduct
+To use PostgreSQL instead (what this app actually runs against in every
+other environment), edit `.env`:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=hetkin_laravel
+DB_USERNAME=<your-user>
+DB_PASSWORD=
+```
 
-## Security Vulnerabilities
+then create the database (`createdb hetkin_laravel`) before migrating.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Migrate and seed
 
-## License
+```bash
+php artisan migrate --seed
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This creates every table and seeds two test accounts you can sign in
+with immediately — see [Test accounts](#test-accounts) below. The
+seeder never runs automatically outside of you explicitly asking for
+`--seed` or running `php artisan db:seed`.
+
+### Build the frontend once
+
+```bash
+npm run build
+```
+
+(Only needed if you're not running `npm run dev` — see below.)
+
+## Running it
+
+The simplest way to run everything at once (Laravel server, queue
+worker, log viewer, and Vite dev server together):
+
+```bash
+composer run dev
+```
+
+This starts:
+
+| Process | What it does |
+|---|---|
+| `php artisan serve` | The app itself, at `http://localhost:8000` |
+| `php artisan queue:listen` | Processes queued jobs (see [Queue](#queue) below) |
+| `php artisan pail` | Live-tails the log |
+| `npm run dev` | Vite dev server with HMR |
+
+Open `http://localhost:8000`.
+
+### Subdomains
+
+The customer portal and admin console are also reachable on
+`dashboard.localhost:8000` and `admin.localhost:8000` respectively
+(bare paths, no `/dashboard` or `/admin` prefix needed) — this mirrors
+how the app is actually deployed (`dashboard.hetkin.app` /
+`admin.hetkin.app`). Modern browsers resolve any `*.localhost` hostname
+to `127.0.0.1` automatically, no `/etc/hosts` edit required. The
+main-domain equivalents (`localhost:8000/dashboard/...`,
+`localhost:8000/admin/...`) work identically — pick whichever you
+prefer, both exercise the same routes.
+
+## Test accounts
+
+Created by `php artisan migrate --seed` (see
+[database/seeders/DatabaseSeeder.php](database/seeders/DatabaseSeeder.php)).
+Local dev only — never seeded in production.
+
+| Realm | URL | Email | Password |
+|---|---|---|---|
+| Admin console | `localhost:8000/admin/sign-in` or `admin.localhost:8000/sign-in` | `admin@hetkin.test` | `password` |
+| Customer portal | `localhost:8000/sign-in` or `dashboard.localhost:8000/sign-in` | `owner@hetkin.test` | `password` |
+
+The admin account has the full `Admin` role, so every admin-console
+page is reachable (Overview, Pilots, Organizations, Baselines,
+Verification, Invoices, Jobs, Audit Log, Team, Docs). The customer
+account owns one seeded organization ("Acme Manufacturing Oy",
+`ACTIVE` status) with no data yet — the dashboard, schedule, and data
+pages all show empty states by design (a brand-new account looking
+empty is correct, documented behavior, not a bug). Upload a CSV, add a
+schedule block, and run optimization through the UI to populate it
+for real.
+
+## What to look at
+
+- **Marketing site** (`/`, `/pricing`, `/faq`, `/how-it-works`,
+  `/trust`, `/methodology`, `/pilot-program`, `/beta`, `/docs`,
+  `/legal/*`) — fully public, no login needed.
+- **Pilot application** (`/pilot-program/apply`) — submits a real
+  application into the admin's Pilot Applications review queue.
+- **Customer portal** — sign in as `owner@hetkin.test`: Dashboard,
+  Schedule, Data (CSV upload), Reports, Billing, Team.
+- **Admin console** — sign in as `admin@hetkin.test`: review the pilot
+  application you just submitted, approve it, watch it become an
+  organization.
+- **Account security** — password reset, password change, active
+  session list/revoke — under the customer portal's Settings.
+
+## Running tests
+
+```bash
+composer test
+# or directly:
+php artisan test
+```
+
+487 tests, ~1,500 assertions, using an in-memory SQLite database (see
+`phpunit.xml`) regardless of what `.env` is configured with — the test
+suite never touches your dev database.
+
+Frontend checks:
+
+```bash
+npx tsc --noEmit          # type-check
+npm run lint              # ESLint, --fix
+./vendor/bin/pint         # PHP formatting (add --test to check without fixing)
+```
+
+## Queue
+
+Every notification in this app sends synchronously (inline, in the
+same request) **except** the four Account Security notifications
+(password reset requested/completed, password changed, logged out of
+all devices), which are genuinely queued. `composer run dev` runs
+`queue:listen` for you automatically; if you're running `php artisan
+serve` on its own instead, start a worker separately or those four
+emails will sit in the `jobs` table and never send:
+
+```bash
+php artisan queue:listen --tries=1 --timeout=0
+```
+
+All outgoing mail is logged to `storage/logs/laravel.log` rather than
+actually sent (`MAIL_MAILER=log`) until `RESEND_API_KEY` is set.
+
+## Optional integrations
+
+None of these are required to run or test the app locally — every one
+of them is a documented no-op when unconfigured:
+
+| Integration | Env vars | Behavior when unset |
+|---|---|---|
+| Resend (email) | `RESEND_API_KEY` | Logs to `storage/logs/laravel.log` instead of sending |
+| PostHog (analytics) | `POSTHOG_KEY`, `VITE_POSTHOG_KEY` | No-op, no network calls |
+| Sentry (error tracking) | `SENTRY_LARAVEL_DSN`, `VITE_SENTRY_DSN` | No-op, no network calls |
+| ENTSO-E (day-ahead prices) | `ENTSO_E_TOKEN` | Price-ingestion job fails closed with a clear error, rather than silently doing nothing |
+
+## Project structure
+
+Domain-driven, under `app/Domain/{Analytics,Alerts,Pricing,Auth,Audit,
+Organizations,Metering,Scheduling,Optimization,Billing,Pilots,Jobs}/
+{Actions,Models,Enums,DTOs,Services,Contracts,Providers,Exceptions,
+Strategies}`. Inertia pages live in `resources/js/Pages`, organized by
+the same realms as the routes (`Portal/`, `Admin/`, `Marketing/`,
+`PilotProgram/`).
+
+For *why* something is built the way it is, check
+[MIGRATION_PLAN.md](MIGRATION_PLAN.md) — every non-obvious decision has
+a numbered ADR explaining the reasoning and, where relevant, the v2
+behavior it's matching.

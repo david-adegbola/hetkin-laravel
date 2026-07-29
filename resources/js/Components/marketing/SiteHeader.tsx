@@ -28,7 +28,7 @@ export default function SiteHeader() {
             <nav className="mx-auto flex h-18 max-w-[1200px] items-center justify-between px-6 py-4">
                 <Link
                     href={route('home')}
-                    className="rounded-control focus-visible:ring-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    className="rounded-control focus-visible:ring-accent focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                 >
                     <Logo />
                 </Link>
@@ -39,7 +39,10 @@ export default function SiteHeader() {
                     >
                         How it works
                     </Link>
-                    <Link href={route('pricing')} className="hover:text-primary">
+                    <Link
+                        href={route('pricing')}
+                        className="hover:text-primary"
+                    >
                         Pricing
                     </Link>
                     <Link
@@ -58,7 +61,10 @@ export default function SiteHeader() {
                 <div className="flex items-center gap-2">
                     <Link
                         href={route('login')}
-                        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+                        className={buttonVariants({
+                            variant: 'ghost',
+                            size: 'sm',
+                        })}
                     >
                         Sign In
                     </Link>

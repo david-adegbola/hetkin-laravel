@@ -10,9 +10,9 @@ const FAQS: Array<{ q: string; a: ReactNode }> = [
             <>
                 We agree a baseline with you before your pilot starts — a
                 documented estimate of what your electricity cost would have
-                been without Hetkin&apos;s recommendations. Verified savings
-                are the measured difference between that locked baseline and
-                your actual metered cost each month. See our{' '}
+                been without Hetkin&apos;s recommendations. Verified savings are
+                the measured difference between that locked baseline and your
+                actual metered cost each month. See our{' '}
                 <Link
                     href={route('methodology')}
                     className="hover:text-navy-900 underline"
@@ -37,9 +37,9 @@ const FAQS: Array<{ q: string; a: ReactNode }> = [
         a: (
             <>
                 Applying is free. If approved, pilots run on a small platform
-                fee plus a share of verified savings — pricing is confirmed
-                with you before anything is billed, and there is no
-                performance fee if there is no saving. See{' '}
+                fee plus a share of verified savings — pricing is confirmed with
+                you before anything is billed, and there is no performance fee
+                if there is no saving. See{' '}
                 <Link
                     href={route('pricing')}
                     className="hover:text-navy-900 underline"
@@ -69,7 +69,7 @@ export default function FaqAccordion() {
                             type="button"
                             onClick={() => setOpenIndex(open ? null : i)}
                             aria-expanded={open}
-                            className="font-display text-navy-900 py-4.5 flex w-full items-center justify-between gap-4 text-left text-base font-semibold"
+                            className="font-display text-navy-900 flex w-full items-center justify-between gap-4 py-4.5 text-left text-base font-semibold"
                         >
                             {item.q}
                             <ChevronDown
