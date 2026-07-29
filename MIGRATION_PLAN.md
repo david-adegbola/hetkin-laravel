@@ -2956,11 +2956,42 @@ Ensure:
 - deployments automatically generate application versions
 - frontend and backend versioning remain synchronized
 
+### Portal Installation Behaviour
+Hetkin consists of multiple application surfaces with different user roles.
+
+The Progressive Web Application experience must remain isolated per
+application surface.
+
+Implement the installation flow so that:
+
+- the Customer Portal is installable as its own standalone application
+- the Admin Portal is installable as its own standalone application
+- each portal has its own Web App Manifest, application identity, icons, start URL, and scope
+- installation prompts are only shown while the user is inside the
+corresponding portal
+- installing the Customer Portal installs only the customer dashboard and customer experience
+- installing the Admin Portal installs only the administrative interface
+- navigating between portals must not trigger installation prompts for the other application
+- authentication and routing remain isolated between installed applications
+- each installed application launches directly into its respective portal
+- each application maintains its own cache, offline shell, and update
+lifecycle where appropriate
+
+The public marketing website must not present itself as an installable
+application.
+
+The install experience should only be available after entering an authenticated
+portal, ensuring users install the application they actually use rather than
+the marketing website.
+
 ### Completion Criteria
 
 Stage 14 is complete when:
 
 - Hetkin is installable on supported browsers
+- the Customer Portal installs as an independent PWA
+- the Admin Portal installs as an independent PWA
+- the marketing website is not installable
 - update detection works correctly
 - versioning is automated
 - deployment integration is complete
