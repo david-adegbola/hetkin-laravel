@@ -79,7 +79,7 @@ review) — building it earlier would mean building it twice.
 | Platform audit: Labour Classification consistency | **Complete** | ADR-92..ADR-95. Marketing/docs copy corrected in 4 places; every Recommendation-derived surface confirmed already correct by construction. |
 | 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
 | 14. Progressive Web Application (PWA) | **Complete** | ADR-103..ADR-109. Customer portal and admin console each install as independent PWAs (own manifest/scope/icons/cache); hand-rolled classic-script Service Worker allow-lists only static assets, never protected content; install eligibility gated server-side (`PwaSurface`) and kept correct across in-app SPA navigation. Three bugs caught by design review before implementation, a fourth (SPA-navigation sync) found via live browser testing — see [PWA.md](PWA.md). |
-| Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110..ADR-111. User-raised question surfaced the customer portal had no sign-out link at all (added one; found and fixed a pre-existing nested-`<button>` bug that silently broke the admin console's own "Sign out" too), then that pressing back afterward still restored the stale authenticated page — traced to Inertia's own client-side history cache (a third mechanism, distinct from ADR-14's HTTP headers), fixed via `Inertia::clearHistory()` + `EncryptHistoryMiddleware`. |
+| Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110..ADR-112. User-raised question surfaced the customer portal had no sign-out link at all (added one; found and fixed a pre-existing nested-`<button>` bug that silently broke the admin console's own "Sign out" too), then that pressing back afterward still restored the stale authenticated page — traced to Inertia's own client-side history cache (a third mechanism, distinct from ADR-14's HTTP headers), fixed via `Inertia::clearHistory()` + `EncryptHistoryMiddleware`. Also fixed customer login always landing on Dashboard rather than honoring a stashed pre-login "intended" URL — a deliberate product decision, not a bug. |
 
 ## Architecture Decisions
 
@@ -3309,6 +3309,43 @@ would be more machinery than the assertion is worth). Re-verified live in
 the browser, repeating the exact reported flow: sign in → navigate →
 sign out → press back now correctly shows the sign-in page, no flash of
 stale content. Full suite (532/532), Pint, and PHPStan all stayed clean.
+
+### ADR-112: Customer login was landing on whatever page the visitor had originally been bounced from, not always Dashboard — traced to Laravel's automatic "intended URL" mechanism, not a bug in this app's own code
+
+A user asked why signing into the portal sometimes landed on Support
+instead of Dashboard. `AuthenticatedSessionController::store()` computed
+the right target (`route('dashboard')`) but returned
+`redirect()->intended($target)` — and Laravel's `Authenticate` middleware
+automatically stashes the URL of any protected page a signed-out visitor
+tries to reach (via `Illuminate\Routing\Redirector::guest()`, called
+internally, independent of this app's own `redirectGuestsTo` closure in
+`bootstrap/app.php`) as the session's "intended" URL. `intended()` then
+honors that stashed value over the computed target whenever one exists —
+so a visitor who'd hit `/support` (a stale tab, a bookmark, a link)
+while signed out landed back on `/support` after login, not Dashboard.
+This is standard, intentional Laravel behavior (many apps rely on it so
+a deep link survives a login detour), not a defect — confirmed by
+reproducing it directly (visiting `/support` signed out, signing in,
+landing on `/support`) before concluding anything was actually broken.
+
+Given the choice between keeping that behavior or always landing on
+Dashboard, the product decision was: always Dashboard.
+`AuthenticatedSessionController::store()` now returns `redirect()->to
+($target)` instead of `->intended($target)` — a one-line change, called
+out explicitly in the controller's own comment so a future reader
+doesn't "fix" it back to `intended()` without knowing this was
+deliberate. Scoped to the customer portal only, per the actual question
+asked — the admin login controller's own `intended()` usage was left
+untouched, not in scope.
+
+New test (`tests/Feature/Auth/CustomerAuthenticationTest.php`) asserts
+this precisely: stashes `session(['url.intended' => '/support'])` —
+exactly what Laravel's own middleware would have done — before logging
+in, and confirms the response still redirects to Dashboard. Re-verified
+live in the browser reproducing the original report exactly: visited
+`/support` signed out, got bounced to sign-in, signed in, landed on the
+Savings Dashboard, not Support. Full suite (533/533), Pint, and PHPStan
+all stayed clean.
 
 ---
 

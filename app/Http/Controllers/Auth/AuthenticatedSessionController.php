@@ -39,8 +39,7 @@ class AuthenticatedSessionController extends Controller
 
         // Session-fixation prevention: a new session ID for every login,
         // never reusing whatever pre-auth session ID the guest happened to
-        // have. Must run before the intended-redirect lookup below reads
-        // from that (now-regenerated) session.
+        // have.
         $request->session()->regenerate();
 
         /** @var User $user */
@@ -56,7 +55,15 @@ class AuthenticatedSessionController extends Controller
             ? route('portal.dashboard', absolute: false)
             : route('dashboard', absolute: false);
 
-        return redirect()->intended($target);
+        // Deliberately `redirect()->to()`, not `redirect()->intended()`:
+        // login always lands on Dashboard, even if the visitor was bounced
+        // here from some other portal page while signed out (which would
+        // otherwise stash that page as Laravel's "intended" URL and send
+        // them there instead — see Illuminate\Routing\Redirector::guest(),
+        // triggered automatically by the `auth` middleware, independent of
+        // anything this app customizes). A deliberate product decision,
+        // not an oversight.
+        return redirect()->to($target);
     }
 
     public function destroy(Request $request, LogoutAction $action): RedirectResponse

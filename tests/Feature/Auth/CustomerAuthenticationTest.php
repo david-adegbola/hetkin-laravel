@@ -18,6 +18,27 @@ test('users can authenticate using the login screen', function () {
     $response->assertRedirect(route('dashboard', absolute: false));
 });
 
+test('login always lands on Dashboard, even with a stashed intended URL', function () {
+    // Simulates what actually happens when a signed-out visitor hits a
+    // protected page directly: Laravel's `auth` middleware (via
+    // Illuminate\Routing\Redirector::guest(), triggered automatically,
+    // not something this app calls itself) stashes that URL in the
+    // session before bouncing to sign-in. AuthenticatedSessionController
+    // deliberately uses redirect()->to(), not ->intended(), so login
+    // always lands on Dashboard regardless — a deliberate product
+    // decision, not an oversight.
+    session(['url.intended' => '/support']);
+
+    $user = User::factory()->create();
+
+    $response = $this->post('/sign-in', [
+        'email' => $user->email,
+        'password' => 'password',
+    ]);
+
+    $response->assertRedirect(route('dashboard', absolute: false));
+});
+
 test('users cannot authenticate with an invalid password', function () {
     $user = User::factory()->create();
 
