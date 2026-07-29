@@ -73,6 +73,7 @@ review) — building it earlier would mean building it twice.
 | 10. Background Jobs & Scheduler | **Complete** | ADR-58..ADR-63 |
 | 11. External integrations (ENTSO-E, Resend, PostHog, Sentry) | **Complete** | ADR-64..ADR-69. ENTSO-E itself was pulled forward into Stage 10. |
 | 12. Marketing site + SEO/OG parity | **Complete** | ADR-70..ADR-77 |
+| Post-Stage-12: Nav & Account Security parity restoration | **Complete** | ADR-78..ADR-82. Billing icon fix, Team & Permissions + Support restored (deferred by ADR-33), Security integrated into PortalLayout + nav. |
 
 ## Architecture Decisions
 
@@ -2056,6 +2057,148 @@ now wrap the form, per ADR-72). All rendered correctly against the
 brand tokens with no console errors. `route:list` was cross-checked
 against every route name referenced by `SiteHeader.tsx`, `SiteFooter.tsx`,
 and `FaqAccordion.tsx` to confirm none were left dangling.
+
+---
+
+## Post-Stage-12: Navigation & Account Security Parity Restoration
+
+### Objective
+
+A review of the completed migration flagged four items as missing
+against the intended product: the Billing nav icon, the Team &
+Permissions module, the Support module, and a discoverable Security
+section. Investigated each against `MIGRATION_PLAN.md`'s own ADRs, v2's
+source, and the current codebase before writing any code — findings and
+fixes below.
+
+### ADR-78: Billing's nav icon was an unintentional near-miss, not a documented decision — `Receipt` → `CreditCard`
+
+`PortalLayout.tsx` used lucide-react's `Receipt` for the Billing nav
+item; v2's `PortalShell.tsx` (`getNavItems()`) uses `CreditCard`. No ADR
+discusses a deliberate substitution — the two icons are visually similar
+enough that this was a near-miss during the Stage 7 port, not a choice.
+Fixed by import swap; no other change needed since `NavLink` just
+renders whatever icon node it's given.
+
+### ADR-79: Team & Permissions and Support restored — deferred by ADR-33 (Stage 5), never revisited by any later stage, backend already built for them
+
+ADR-33 deliberately scoped Stage 5's portal nav down to an "honest
+subset" (no nav link to a page that didn't exist yet), with both
+`PortalLayout.tsx` and `routes/portal.php` carrying docblocks promising
+"extend this list as later stages add real pages." No stage between 6
+and 12 did. Meanwhile `MemberPolicy::view()` and `InvitationPolicy::view()`
+(Stage 3) were already written anticipating this exact page — both
+docblocks say, verbatim, "matches the portal 'team' page (a later
+stage)" — and both are registered via `Gate::policy()`. This was a
+genuine loose end, not a deferred-and-abandoned decision.
+
+Restored as a straight port of v2's two pages
+(`src/app/(portal)/dashboard/{team,support}/page.tsx`):
+`App\Http\Controllers\Portal\TeamController` (members + pending
+invitations, read-only — v2 itself never built an invite-member form on
+this page either, so this port doesn't invent one) and
+`App\Http\Controllers\Portal\SupportController` (static content, no
+query, matching v2's own "no `requirePortalContext()` call here"
+comment). Both registered in `routes/portal.php` alongside the existing
+portal routes (so both mount points — main-domain-prefixed and the
+`dashboard.` subdomain — get them for free, same as every other portal
+route). `PortalLayout`'s nav now lists all seven of v2's original items;
+ADR-33's "honest subset" caveat no longer applies since nothing here
+points at a nonexistent page anymore.
+
+### ADR-80: Security — not a v2 feature (ADR-13..20's out-of-band addition), fully built since Stage 1, but never wired to `PortalLayout` or linked from anywhere
+
+Unlike Team/Support, this has no v2 page to restore parity against —
+it's this port's own addition. The backend and page logic
+(`Settings/Security.tsx`: password change, active-session list/revoke,
+logout-other-devices, staleness recommendations) were complete and
+tested by Stage 1. The gap was pure integration: the page's own docblock
+said it used temporary placeholder chrome "rather than inventing
+settings-page chrome that will just be replaced" once `PortalLayout`
+existed — Stage 5 built that layout and never came back to do the
+replacement, and grepping the entire frontend turned up zero links to
+`route('settings.security')` anywhere. Fully functional, completely
+undiscoverable.
+
+Fixed by rewrapping `Security.tsx` in `PortalLayout` (`Security.layout =
+...`, matching every other portal page) and adding a nav entry — appended
+after the v2-mirrored items rather than interleaved with them, since
+there's no v2 position to match against; uses `route('settings.security')`
+directly rather than `${base}/...` string-concatenation like every other
+item, because that route (`routes/settings.php`) was never inside the
+portal's `dashboard`-prefix group to begin with, and — per
+`routes/domains.php`'s own docblock — isn't `->domain()`-constrained
+either, so it already matched every host without any routing change.
+Every `Card`'s content is byte-for-byte unchanged from the original;
+only the outer wrapper and page heading changed, plus the standalone
+"Signed in as…"/"back to dashboard" footer was dropped as redundant now
+that `PortalLayout`'s own sidebar provides that navigation.
+
+### ADR-81: Security's requested sub-features, checked individually against what the architecture actually supports — nothing invented
+
+Per instruction to implement only what's already backed and to prepare
+documented extension points for the rest:
+
+- **Active sessions, password management** — already fully real (Stage
+  1); no change beyond the layout wrap above.
+- **Recent login history** — genuinely backed, but only partially:
+  `App\Domain\Auth\Actions\LoginAction` already writes an `auth.login`
+  `AuditLogEntry` per successful sign-in, but captures no IP/user-agent
+  on it (unlike `SessionRecord`, which does). `SecurityController` now
+  queries the last 5 such entries for the signed-in user directly off
+  `AuditLogEntry` (not a new service — `AuditLogService` only ever
+  writes, per its own docblock; five rows read straight off the model
+  didn't earn a new abstraction) and the page shows their timestamps
+  only. Deliberately not showing device/location: that data isn't
+  captured at this point in the code today, and fabricating it would
+  violate the "don't invent" instruction as much as fabricating the
+  feature would.
+- **Two-factor authentication** — confirmed zero infrastructure exists
+  anywhere in the codebase (no columns, no TOTP/WebAuthn package, no
+  enrollment flow — checked directly, not assumed). Not built. Added a
+  visibly inert `TwoFactorCard` ("Coming soon" badge, no interactive
+  controls) with a docblock naming the concrete extension points (a
+  secret/recovery-codes column set on `users`, an enrollment flow, a
+  second-factor check inserted into `LoginRequest` alongside its
+  existing credential check) for whoever picks this up later.
+- **Security notifications** — already real behavior (the four queued
+  Account Security notifications from Stage 1/11 fire automatically on
+  password reset/change/logout-all-devices). Documented as a one-line
+  informational note on the page, not a new preferences UI — there is
+  nothing to toggle; these unconditionally fire.
+- **Trusted devices** — no separate concept from "active session" in
+  this architecture; each `SessionRecord` row already IS one device's
+  session. Documented as a code comment rather than built as a second,
+  parallel list that would just duplicate the sessions card under a
+  different name.
+
+### ADR-82: Validation — full suite, live smoke test of all four fixes, mobile nav drawer confirmed, dark mode confirmed unaffected (app has no dark-mode implementation anywhere, not a gap introduced here)
+
+Added 8 new tests (`TeamControllerTest`, `SupportControllerTest`,
+`SecurityPageTest` — including a test that recent-login history is
+capped at 5 and scoped to the requesting user only, not leaked across
+users) — full suite passed 495/495 (1,611 assertions). `tsc --noEmit`,
+`eslint` (two real files needed `--fix` for prettier-only deltas, no
+logic changes), and `pint --test` all clean; `vite build` succeeded.
+
+Live smoke test against a freshly seeded dev database: signed in as the
+seeded customer owner, confirmed all 8 sidebar items render (Dashboard
+through Security) with correct icons including the corrected Billing
+icon; visited `/dashboard/team` (real seeded member listed, correct
+role), `/dashboard/support` (static content matches v2), and
+`/settings/security` (all six cards render, including a real recent-login
+timestamp from an actual sign-in during the same session and the inert
+2FA card). Confirmed responsive behavior at mobile width (375px): the
+hamburger-triggered nav drawer opens and lists all 8 items with correct
+icons, including the newly-added ones. Confirmed dark mode: this app has
+no dark-mode implementation anywhere (no toggle, no `prefers-color-scheme`
+wiring beyond the unused `@custom-variant dark` class-based hook already
+in `app.css` from before this work) — forcing the browser's OS-level
+color scheme to dark rendered identically to light, which is existing,
+unchanged app-wide behavior, not a regression introduced here.
+Authorization re-confirmed via the automated suite (non-member redirected
+to sign-in on both new routes) rather than repeated manually in-browser,
+since that path was already covered.
 
 ---
 

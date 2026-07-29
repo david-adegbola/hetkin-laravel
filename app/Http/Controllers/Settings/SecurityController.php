@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Domain\Audit\Enums\AuditActorType;
+use App\Domain\Audit\Models\AuditLogEntry;
 use App\Domain\Auth\Services\ActiveSessionFinder;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -37,6 +39,24 @@ class SecurityController extends Controller
             'sessions' => $activeSessionFinder
                 ->forUser($user, $request->session()->getId())
                 ->map->toArray()
+                ->values(),
+            // Timestamps only — App\Domain\Auth\Actions\LoginAction writes
+            // an 'auth.login' AuditLogEntry per successful sign-in but
+            // doesn't capture IP/user-agent on it (unlike SessionRecord,
+            // which does), so there's no device/location to show here
+            // without inventing data the architecture doesn't actually
+            // collect at this point. A direct query, not a new service —
+            // AuditLogService only ever writes (see its own docblock); five
+            // rows read straight off the model doesn't earn a new
+            // abstraction.
+            'recentLogins' => AuditLogEntry::query()
+                ->where('actor_type', AuditActorType::User)
+                ->where('actor_id', $user->id)
+                ->where('action', 'auth.login')
+                ->orderByDesc('created_at')
+                ->limit(5)
+                ->get()
+                ->map(fn (AuditLogEntry $entry) => $entry->created_at->toIso8601String())
                 ->values(),
         ]);
     }

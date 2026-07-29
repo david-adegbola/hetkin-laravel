@@ -6,6 +6,8 @@ use App\Http\Controllers\Portal\DataController;
 use App\Http\Controllers\Portal\RecommendationController;
 use App\Http\Controllers\Portal\ReportController;
 use App\Http\Controllers\Portal\ScheduleController;
+use App\Http\Controllers\Portal\SupportController;
+use App\Http\Controllers\Portal\TeamController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -31,10 +33,11 @@ use Illuminate\Support\Facades\Route;
  *
  * Every route requires an authenticated customer AND a resolved
  * organization (App\Http\Middleware\ResolveOrganizationContext) — matches
- * v2's (portal)/layout.tsx gating every page under it the same way. As
- * later stages add real portal pages (billing, reports, team, support),
- * add them here once, not to both routes/web.php and routes/domains.php
- * separately.
+ * v2's (portal)/layout.tsx gating every page under it the same way. Every
+ * page from v2's full sidebar (Dashboard/Schedule/Data/Reports/Billing/
+ * Team/Support) now has a real route here — Team and Support were the
+ * last two, restored per MIGRATION_PLAN.md's post-Stage-12 ADR after
+ * Stage 5's ADR-33 deliberately deferred them.
  */
 return function (): void {
     Route::middleware(['auth:web', 'organization.context'])->group(function () {
@@ -59,5 +62,9 @@ return function (): void {
         Route::get('reports/{assessment}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
 
         Route::get('billing', [BillingController::class, 'index'])->name('billing');
+
+        Route::get('team', [TeamController::class, 'index'])->name('team');
+
+        Route::get('support', [SupportController::class, 'index'])->name('support');
     });
 };

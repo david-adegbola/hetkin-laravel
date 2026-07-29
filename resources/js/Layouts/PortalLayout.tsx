@@ -5,11 +5,14 @@ import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import {
     CalendarClock,
+    CreditCard,
     Database,
     FileText,
     LayoutDashboard,
+    LifeBuoy,
     Menu,
-    Receipt,
+    ShieldCheck,
+    Users,
 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -40,14 +43,22 @@ const LOGO_LINK_CLASSES =
  * cause being the sidebar fully unmounting/remounting on every click. A
  * persistent layout means Inertia only swaps `children` on navigation.
  *
- * Nav items are a deliberate SUBSET of v2's full sidebar (which also has
- * Team & Permissions and Support) — this Laravel port is itself
- * mid-migration, and those pages don't exist yet (their own later stages).
- * Showing a nav link to a 404 would be worse than v2's actual behavior,
- * not equivalent to it, so the nav only lists what's actually been built
- * so far: Dashboard/Schedule/Data (Stage 5) and, as of Stage 7,
- * Reports/Billing. See MIGRATION_PLAN.md ADR-33; extend this list as later
- * stages add real pages, the same way routes/portal.php is extended.
+ * Nav items now match v2's full sidebar exactly (Dashboard/Schedule/Data/
+ * Reports/Billing/Team & Permissions/Support) — ADR-33 (Stage 5) had
+ * deliberately scoped this list down to an honest subset while Team and
+ * Support didn't have real pages yet ("a nav link to a 404 is worse than
+ * v2's actual behavior"); both now exist (Portal/Team.tsx,
+ * Portal/Support.tsx), so the subset restriction no longer applies. See
+ * MIGRATION_PLAN.md's post-Stage-12 ADR restoring these.
+ *
+ * Security is appended after the v2-mirrored items, not interleaved with
+ * them — it's this port's own out-of-band Account Security module
+ * (MIGRATION_PLAN.md ADR-13..20), with no v2 nav item to match position
+ * against, so it goes last rather than guessing where v2 would have put
+ * it. Its href is Ziggy's `route('settings.security')`, not
+ * `${base}/security` like every other item — that route lives outside the
+ * portal's `dashboard`-prefix group entirely (routes/settings.php) and,
+ * unlike every portal route, isn't `base`-relative to begin with.
  */
 export default function PortalLayout({ children }: { children: ReactNode }) {
     const { organization } = usePage<PageProps>().props;
@@ -108,7 +119,43 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Billing',
             exact: false,
             icon: (
-                <Receipt
+                <CreditCard
+                    aria-hidden
+                    className="h-4 w-4 flex-shrink-0"
+                    strokeWidth={2}
+                />
+            ),
+        },
+        {
+            href: `${base}/team`,
+            label: 'Team & Permissions',
+            exact: false,
+            icon: (
+                <Users
+                    aria-hidden
+                    className="h-4 w-4 flex-shrink-0"
+                    strokeWidth={2}
+                />
+            ),
+        },
+        {
+            href: `${base}/support`,
+            label: 'Support',
+            exact: false,
+            icon: (
+                <LifeBuoy
+                    aria-hidden
+                    className="h-4 w-4 flex-shrink-0"
+                    strokeWidth={2}
+                />
+            ),
+        },
+        {
+            href: route('settings.security'),
+            label: 'Security',
+            exact: false,
+            icon: (
+                <ShieldCheck
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}

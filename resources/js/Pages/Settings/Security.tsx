@@ -1,3 +1,4 @@
+import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Badge } from '@/Components/ui/Badge';
 import { Button } from '@/Components/ui/Button';
 import {
@@ -11,9 +12,9 @@ import {
 import { FieldError, Label } from '@/Components/ui/Input';
 import { PasswordInput } from '@/Components/ui/PasswordInput';
 import { PasswordStrengthMeter } from '@/Components/ui/PasswordStrengthMeter';
-import type { PageProps } from '@/types';
-import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler, useState } from 'react';
+import PortalLayout from '@/Layouts/PortalLayout';
+import { router, useForm } from '@inertiajs/react';
+import { FormEventHandler, ReactElement, useState } from 'react';
 
 interface SessionRow {
     id: string;
@@ -30,53 +31,59 @@ interface SecurityPageProps {
     passwordChangedAt: string | null;
     passwordAgeDays: number | null;
     sessions: SessionRow[];
+    /** ISO timestamps only — see SecurityController's docblock for why. */
+    recentLogins: string[];
 }
 
 /**
- * Settings → Security (Account Security module). No shared portal shell
- * exists yet (that lands with the real portal in Stage 5) — this page uses
- * the same Card/Button/Input primitives every other page in this app
- * does, wrapped in a plain centered container matching the placeholder
- * pattern from Stage 1, rather than inventing settings-page chrome that
- * will just be replaced.
+ * Settings → Security (Account Security module). Now wrapped in
+ * PortalLayout rather than its own standalone chrome — Stage 1's original
+ * placeholder said this "uses ... a plain centered container ... rather
+ * than inventing settings-page chrome that will just be replaced" once a
+ * shared portal layout existed. Stage 5 built that layout but never came
+ * back to do the replacement, and no nav item pointed here either; both
+ * are fixed as of MIGRATION_PLAN.md's post-Stage-12 ADR. Every Card's
+ * content below is unchanged from the original — only the outer wrapper
+ * changed, to match every other portal page.
  */
 export default function Security({
     passwordChangedAt,
     passwordAgeDays,
     sessions,
+    recentLogins,
 }: SecurityPageProps) {
-    const { auth } = usePage<PageProps>().props;
-
     return (
-        <div className="bg-background min-h-screen p-6">
-            <div className="mx-auto flex max-w-2xl flex-col gap-6">
-                <div>
-                    <p className="text-text-secondary text-sm">Settings</p>
-                    <h1 className="text-primary text-2xl font-semibold">
-                        Security
-                    </h1>
-                </div>
-
+        <>
+            <PortalPageHeader title="Security" />
+            <div className="flex flex-col gap-6">
                 <SecurityRecommendations
                     passwordAgeDays={passwordAgeDays}
                     sessionCount={sessions.length}
                 />
                 <ChangePasswordCard passwordChangedAt={passwordChangedAt} />
+                {/*
+                 * "Trusted devices" isn't a separate concept from "active
+                 * sessions" in this architecture — there's no distinct
+                 * trusted-device model, only App\Domain\Auth\Models\
+                 * SessionRecord, and each row below already IS one
+                 * device's session. A second, parallel "trusted devices"
+                 * list would just duplicate this one under a different
+                 * name, so it isn't built as its own section.
+                 */}
                 <ActiveSessionsCard sessions={sessions} />
-
-                <p className="text-center text-sm">
-                    <Link
-                        href={route('dashboard')}
-                        className="text-accent hover:text-accent-hover font-medium"
-                    >
-                        ← Back to dashboard
-                    </Link>
-                </p>
-                <p className="text-text-secondary text-center text-xs">
-                    Signed in as {auth.user?.email}
+                <RecentLoginsCard logins={recentLogins} />
+                <TwoFactorCard />
+                <p className="text-text-secondary text-xs">
+                    Password changes, resets, and signing out of all devices
+                    each send you a confirmation email automatically — see{' '}
+                    <span className="font-mono">
+                        App\Notifications\Password*
+                    </span>{' '}
+                    and <span className="font-mono">LoggedOutAllDevices</span>.
+                    There&rsquo;s nothing to configure; these always fire.
                 </p>
             </div>
-        </div>
+        </>
     );
 }
 
@@ -86,6 +93,16 @@ function formatDate(iso: string | null): string {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
+    });
+}
+
+function formatDateTime(iso: string): string {
+    return new Date(iso).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
     });
 }
 
@@ -306,3 +323,70 @@ function ActiveSessionsCard({ sessions }: { sessions: SessionRow[] }) {
         </Card>
     );
 }
+
+/**
+ * Backed by real data (App\Domain\Auth\Actions\LoginAction's audit
+ * entries), but deliberately minimal — timestamps only, since IP/device
+ * metadata isn't captured on login events today (only on SessionRecord).
+ * Extend App\Domain\Audit\DTOs\AuditEvent's metadata at the LoginAction
+ * call site first if a richer history (device, approximate location) is
+ * ever wanted — this card would then just render the extra fields, no
+ * structural change needed here.
+ */
+function RecentLoginsCard({ logins }: { logins: string[] }) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Recent login history</CardTitle>
+            </CardHeader>
+            <CardContent>
+                {logins.length === 0 ? (
+                    <p className="text-text-secondary text-sm">
+                        No login history recorded yet.
+                    </p>
+                ) : (
+                    <ul className="divide-border divide-y">
+                        {logins.map((iso) => (
+                            <li
+                                key={iso}
+                                className="text-primary py-2 text-sm first:pt-0 last:pb-0"
+                            >
+                                {formatDateTime(iso)}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+/**
+ * Extension point, not a feature: no 2FA infrastructure exists anywhere in
+ * this codebase yet (no columns, no TOTP/WebAuthn package, no enrollment
+ * flow) — this card is deliberately inert. Wiring real 2FA would need, at
+ * minimum: a secret/recovery-codes column set on `users`, an enrollment +
+ * verification flow, and a second factor check inserted into
+ * App\Http\Requests\Auth\LoginRequest alongside its existing credential
+ * check.
+ */
+function TwoFactorCard() {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Two-factor authentication</CardTitle>
+                <Badge variant="neutral" showGlyph={false}>
+                    Coming soon
+                </Badge>
+            </CardHeader>
+            <CardContent>
+                <p className="text-text-secondary text-sm">
+                    Not available yet. When it ships, you&rsquo;ll be able to
+                    require a second step at sign-in on top of your password.
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
+Security.layout = (page: ReactElement) => <PortalLayout>{page}</PortalLayout>;
