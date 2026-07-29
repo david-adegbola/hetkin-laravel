@@ -46,7 +46,50 @@ test('throws when no block has an estimated energy use', function () {
     ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->withoutEstimatedKwh()->create();
 
     expect(fn () => app(RunOptimizationAction::class)->execute($organization, $user))
-        ->toThrow(OptimizationActionException::class, 'No schedule blocks have an estimated energy use yet');
+        ->toThrow(OptimizationActionException::class, 'No schedule blocks are eligible for optimization yet');
+});
+
+test('throws when the only blocks with an estimated energy use are labour-bound', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->labourBound()->create([
+        'estimated_kwh' => 500,
+    ]);
+
+    expect(fn () => app(RunOptimizationAction::class)->execute($organization, $user))
+        ->toThrow(OptimizationActionException::class, 'No schedule blocks are eligible for optimization yet');
+});
+
+test('a labour-bound block never produces a recommendation, even in a materially cheaper window', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    // One eligible Unmanned block already in its cheapest window (so it
+    // alone would produce zero recommendations) alongside a LabourBound
+    // block sitting in the most expensive hour — if the labour filter
+    // were leaking, this block would be the one generating a
+    // recommendation.
+    ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+        'start_at' => Carbon::parse('2026-01-01 03:00', 'UTC'),
+        'end_at' => Carbon::parse('2026-01-01 04:00', 'UTC'),
+        'estimated_kwh' => 500,
+    ]);
+    ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->labourBound()->create([
+        'start_at' => Carbon::parse('2026-01-01 12:00', 'UTC'),
+        'end_at' => Carbon::parse('2026-01-01 13:00', 'UTC'),
+        'estimated_kwh' => 500,
+    ]);
+    $prices = array_fill(0, 24, 100.0);
+    $prices[3] = 10.0;
+    seedDayPrices(Carbon::parse('2026-01-01', 'UTC'), $prices);
+
+    $run = app(RunOptimizationAction::class)->execute($organization, $user);
+
+    app(CurrentOrganization::class)->set($organization);
+    expect(Recommendation::query()->where('optimization_run_id', $run->id)->count())->toBe(0);
 });
 
 test('throws when no price data covers the schedule\'s dates', function () {

@@ -4,6 +4,8 @@ import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { ReactElement } from 'react';
 
+type LabourClassification = 'UNMANNED' | 'LABOUR_BOUND';
+
 interface ScheduleBlockRow {
     id: string;
     site_name: string;
@@ -11,6 +13,19 @@ interface ScheduleBlockRow {
     start_at: string;
     end_at: string;
     estimated_kwh: number | null;
+    labour_classification: LabourClassification;
+}
+
+function LabourClassificationBadge({ value }: { value: LabourClassification }) {
+    return value === 'UNMANNED' ? (
+        <Badge variant="navy" showGlyph={false}>
+            Unmanned
+        </Badge>
+    ) : (
+        <Badge variant="mid" showGlyph={false}>
+            Labour Bound
+        </Badge>
+    );
 }
 
 interface ScheduleVersion {
@@ -101,6 +116,9 @@ export default function ScheduleHistory({
                                                 <th className="py-2 pr-4">
                                                     Est. kWh
                                                 </th>
+                                                <th className="py-2 pr-4">
+                                                    Labour
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -135,6 +153,13 @@ export default function ScheduleHistory({
                                                                   'en-GB',
                                                               )
                                                             : '—'}
+                                                    </td>
+                                                    <td className="py-2 pr-4">
+                                                        <LabourClassificationBadge
+                                                            value={
+                                                                b.labour_classification
+                                                            }
+                                                        />
                                                     </td>
                                                 </tr>
                                             ))}

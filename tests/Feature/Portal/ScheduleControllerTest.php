@@ -9,6 +9,7 @@ use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Enums\PriceSource;
 use App\Domain\Pricing\Models\ElectricityPrice;
+use App\Domain\Scheduling\Enums\LabourClassification;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Domain\Scheduling\Models\ScheduleBlock;
 use Illuminate\Support\Carbon;
@@ -51,10 +52,54 @@ test('submitting a valid block redirects back with a success status', function (
         'start_at' => '2024-01-01T08:00',
         'end_at' => '2024-01-01T12:00',
         'estimated_kwh' => '150',
+        'labour_classification' => 'UNMANNED',
     ]);
 
     $response->assertRedirect();
     $response->assertSessionHas('status', 'schedule-block-added');
+    expect(ScheduleBlock::query()->latest('created_at')->first()->labour_classification)
+        ->toBe(LabourClassification::Unmanned);
+});
+
+test('labour classification must be a recognized value', function () {
+    ['user' => $user] = portalUser();
+
+    $response = $this->actingAs($user, 'web')->post(route('schedule.store'), [
+        'asset_label' => 'Extruder 2',
+        'start_at' => '2024-01-01T08:00',
+        'end_at' => '2024-01-01T12:00',
+        'labour_classification' => 'SOMETHING_ELSE',
+    ]);
+
+    $response->assertSessionHasErrors('labour_classification');
+});
+
+test('labour classification is required', function () {
+    ['user' => $user] = portalUser();
+
+    $response = $this->actingAs($user, 'web')->post(route('schedule.store'), [
+        'asset_label' => 'Extruder 2',
+        'start_at' => '2024-01-01T08:00',
+        'end_at' => '2024-01-01T12:00',
+    ]);
+
+    $response->assertSessionHasErrors('labour_classification');
+});
+
+test('the schedule page reports eligibility using labour classification, not just estimated kWh', function () {
+    ['user' => $user, 'organization' => $organization] = portalUser();
+    app(CurrentOrganization::class)->set($organization);
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->labourBound()->create([
+        'estimated_kwh' => 500,
+    ]);
+
+    $response = $this->actingAs($user, 'web')->get(route('schedule'));
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('schedule.hasEligibleBlocks', false)
+        ->where('schedule.blocks.0.labour_classification', 'LABOUR_BOUND'));
 });
 
 test('the end time must be after the start time', function () {

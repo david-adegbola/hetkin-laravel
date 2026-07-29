@@ -71,10 +71,19 @@ class RunOptimizationAction
                 throw new OptimizationActionException('Add at least one schedule block first.');
             }
 
-            $blocksWithKwh = $schedule->blocks->filter(fn ($block) => $block->estimated_kwh !== null);
-            if ($blocksWithKwh->isEmpty()) {
+            // ScheduleBlock::isEligibleForOptimization() is the single
+            // eligibility check (kWh present + Unmanned) — the input set
+            // to the engine narrows here; the engine itself never learns
+            // a labour-bound block existed. See MIGRATION_PLAN.md's
+            // Labour-Aware Shiftable Load Classification ADR for why:
+            // labour-bound load is technically shiftable, but only if
+            // someone works a different time, which makes a recommended
+            // shift operationally misleading rather than a real
+            // opportunity.
+            $eligibleBlocks = $schedule->blocks->filter(fn ($block) => $block->isEligibleForOptimization());
+            if ($eligibleBlocks->isEmpty()) {
                 throw new OptimizationActionException(
-                    'No schedule blocks have an estimated energy use yet — add that when creating a block.',
+                    'No schedule blocks are eligible for optimization yet — add an estimated energy use to an Unmanned block.',
                 );
             }
 
@@ -99,7 +108,7 @@ class RunOptimizationAction
             $result = $this->engine->generate(new RecommendationEngineInput(
                 organizationId: $organization->id,
                 scheduleId: $schedule->id,
-                blocks: $blocksWithKwh->map(fn ($block) => new EngineScheduleBlockInput(
+                blocks: $eligibleBlocks->map(fn ($block) => new EngineScheduleBlockInput(
                     id: $block->id,
                     assetLabel: $block->asset_label,
                     startAt: $block->start_at,

@@ -1,11 +1,14 @@
 import PortalPageHeader from '@/Components/portal/PortalPageHeader';
+import { Badge } from '@/Components/ui/Badge';
 import { Button } from '@/Components/ui/Button';
 import { Card } from '@/Components/ui/Card';
-import { FieldError, Input, Label } from '@/Components/ui/Input';
+import { FieldError, Input, Label, Select } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
 import { Link, router, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
+
+type LabourClassification = 'UNMANNED' | 'LABOUR_BOUND';
 
 interface ScheduleBlockRow {
     id: string;
@@ -14,13 +17,26 @@ interface ScheduleBlockRow {
     start_at: string;
     end_at: string;
     estimated_kwh: number | null;
+    labour_classification: LabourClassification;
 }
 
 interface ScheduleData {
     version: number;
     status: string;
-    hasBlocksWithEstimatedKwh: boolean;
+    hasEligibleBlocks: boolean;
     blocks: ScheduleBlockRow[];
+}
+
+function LabourClassificationBadge({ value }: { value: LabourClassification }) {
+    return value === 'UNMANNED' ? (
+        <Badge variant="navy" showGlyph={false}>
+            Unmanned
+        </Badge>
+    ) : (
+        <Badge variant="mid" showGlyph={false}>
+            Labour Bound
+        </Badge>
+    );
 }
 
 interface OptimizationStatus {
@@ -38,6 +54,11 @@ function AddBlockForm({ base }: { base: string }) {
         start_at: '',
         end_at: '',
         estimated_kwh: '',
+        // Pre-selected to the conservative value, not blank — matches
+        // AddScheduleBlockAction's own default and the creating
+        // migration's DB-level default. Marking a block Unmanned is a
+        // deliberate choice, never the silent/default outcome.
+        labour_classification: 'LABOUR_BOUND' as LabourClassification,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -51,7 +72,7 @@ function AddBlockForm({ base }: { base: string }) {
     return (
         <form
             onSubmit={submit}
-            className="grid gap-3 sm:grid-cols-4 sm:items-end"
+            className="grid gap-3 sm:grid-cols-5 sm:items-end"
         >
             <div className="sm:col-span-1">
                 <Label htmlFor="asset_label">Asset / line</Label>
@@ -99,7 +120,27 @@ function AddBlockForm({ base }: { base: string }) {
                 />
                 <FieldError>{errors.estimated_kwh}</FieldError>
             </div>
-            <div className="sm:col-span-4">
+            <div>
+                <Label htmlFor="labour_classification">
+                    Labour classification
+                </Label>
+                <Select
+                    id="labour_classification"
+                    required
+                    value={data.labour_classification}
+                    onChange={(e) =>
+                        setData(
+                            'labour_classification',
+                            e.target.value as LabourClassification,
+                        )
+                    }
+                >
+                    <option value="LABOUR_BOUND">Labour Bound</option>
+                    <option value="UNMANNED">Unmanned</option>
+                </Select>
+                <FieldError>{errors.labour_classification}</FieldError>
+            </div>
+            <div className="sm:col-span-5">
                 <Button type="submit" size="sm" disabled={processing}>
                     {processing ? 'Adding…' : 'Add block'}
                 </Button>
@@ -230,8 +271,11 @@ export default function Schedule({
                 <p className="text-text-secondary mb-4 text-xs">
                     Add each production run manually for now — a CSV/ERP import
                     path is planned once there is a real export format to build
-                    against. Estimated energy use is optional but required for
-                    that block to be considered when running optimization.
+                    against. A block needs both an estimated energy use and an
+                    Unmanned labour classification to be considered when running
+                    optimization — Labour Bound blocks (shifting them means
+                    someone works a different time) are tracked here but never
+                    turned into a recommendation.
                 </p>
                 <AddBlockForm base={base} />
             </Card>
@@ -265,10 +309,10 @@ export default function Schedule({
                                     applyDecisionsStatus={applyDecisionsStatus}
                                 />
                             )}
-                            {!schedule.hasBlocksWithEstimatedKwh && (
+                            {!schedule.hasEligibleBlocks && (
                                 <p className="text-text-secondary mt-1.5 text-xs">
                                     Add estimated energy use to at least one
-                                    block to run optimization.
+                                    Unmanned block to run optimization.
                                 </p>
                             )}
                         </div>
@@ -290,6 +334,7 @@ export default function Schedule({
                                     <th className="py-2 pr-4">Start</th>
                                     <th className="py-2 pr-4">End</th>
                                     <th className="py-2 pr-4">Est. kWh</th>
+                                    <th className="py-2 pr-4">Labour</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -320,6 +365,11 @@ export default function Schedule({
                                                       'en-GB',
                                                   )
                                                 : '—'}
+                                        </td>
+                                        <td className="py-2 pr-4">
+                                            <LabourClassificationBadge
+                                                value={b.labour_classification}
+                                            />
                                         </td>
                                     </tr>
                                 ))}

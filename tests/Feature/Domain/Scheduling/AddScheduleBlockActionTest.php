@@ -5,6 +5,7 @@ use App\Domain\Metering\Models\Site;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Scheduling\Actions\AddScheduleBlockAction;
+use App\Domain\Scheduling\Enums\LabourClassification;
 use App\Domain\Scheduling\Enums\ScheduleStatus;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Domain\Scheduling\Models\ScheduleBlock;
@@ -81,6 +82,39 @@ test('writes an audit log entry scoped to the organization', function () {
     expect($entry->organization_id)->toBe($organization->id);
     expect($entry->entity_type)->toBe('ScheduleBlock');
     expect($entry->entity_id)->toBe($block->id);
+});
+
+test('defaults to Labour Bound when no classification is given', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+
+    $block = app(AddScheduleBlockAction::class)->execute(
+        $organization,
+        $user,
+        'Extruder 2',
+        Carbon::parse('2024-01-01 08:00'),
+        Carbon::parse('2024-01-01 12:00'),
+        150.0,
+    );
+
+    expect($block->labour_classification)->toBe(LabourClassification::LabourBound);
+});
+
+test('stores an explicitly given classification', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+
+    $block = app(AddScheduleBlockAction::class)->execute(
+        $organization,
+        $user,
+        'Compressor 1',
+        Carbon::parse('2024-01-01 08:00'),
+        Carbon::parse('2024-01-01 12:00'),
+        150.0,
+        LabourClassification::Unmanned,
+    );
+
+    expect($block->labour_classification)->toBe(LabourClassification::Unmanned);
 });
 
 test('each call adds a block without creating duplicate sites or schedules', function () {

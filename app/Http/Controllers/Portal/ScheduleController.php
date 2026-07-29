@@ -10,6 +10,7 @@ use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Scheduling\Actions\AddScheduleBlockAction;
+use App\Domain\Scheduling\Enums\LabourClassification;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Portal\StoreScheduleBlockRequest;
@@ -46,7 +47,13 @@ class ScheduleController extends Controller
             'schedule' => $schedule ? [
                 'version' => $schedule->version,
                 'status' => $schedule->status->value,
-                'hasBlocksWithEstimatedKwh' => $schedule->blocks->contains(fn ($block) => $block->estimated_kwh !== null),
+                // Renamed from hasBlocksWithEstimatedKwh — a block also
+                // needs to be Unmanned to actually be considered when
+                // running optimization now (ScheduleBlock::
+                // isEligibleForOptimization()), so the "why can't I
+                // optimize" hint on the frontend needs the real answer,
+                // not just the kWh half of it.
+                'hasEligibleBlocks' => $schedule->blocks->contains(fn ($block) => $block->isEligibleForOptimization()),
                 'blocks' => $schedule->blocks->map(fn ($block) => [
                     'id' => $block->id,
                     'site_name' => $block->site->name,
@@ -54,6 +61,7 @@ class ScheduleController extends Controller
                     'start_at' => $block->start_at->toIso8601String(),
                     'end_at' => $block->end_at->toIso8601String(),
                     'estimated_kwh' => $block->estimated_kwh !== null ? (float) $block->estimated_kwh : null,
+                    'labour_classification' => $block->labour_classification->value,
                 ]),
             ] : null,
             'pendingDecisionCount' => $pendingDecisionCount,
@@ -79,6 +87,7 @@ class ScheduleController extends Controller
             Carbon::parse($request->string('start_at')->toString()),
             Carbon::parse($request->string('end_at')->toString()),
             $request->filled('estimated_kwh') ? (float) $request->input('estimated_kwh') : null,
+            LabourClassification::from($request->string('labour_classification')->toString()),
         );
 
         return back()->with('status', 'schedule-block-added');
@@ -144,6 +153,7 @@ class ScheduleController extends Controller
                     'start_at' => $block->start_at->toIso8601String(),
                     'end_at' => $block->end_at->toIso8601String(),
                     'estimated_kwh' => $block->estimated_kwh !== null ? (float) $block->estimated_kwh : null,
+                    'labour_classification' => $block->labour_classification->value,
                 ]),
             ]),
         ]);

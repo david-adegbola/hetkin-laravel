@@ -75,6 +75,7 @@ review) — building it earlier would mean building it twice.
 | 12. Marketing site + SEO/OG parity | **Complete** | ADR-70..ADR-77 |
 | Post-Stage-12: Nav & Account Security parity restoration | **Complete** | ADR-78..ADR-82. Billing icon fix, Team & Permissions + Support restored (deferred by ADR-33), Security integrated into PortalLayout + nav. |
 | Post-Stage-12: Enterprise dashboard UX review | **Complete** | ADR-83..ADR-85. 14 of 16 proposed items rejected with reasoning (domain mismatch or premature); Portal Dashboard's v2 stat cards + onboarding checklist (ADR-33's last open gap) closed. |
+| New Feature: Labour-Aware Shiftable Load Classification | **Complete** | ADR-86..ADR-91. New product scope (no v2 equivalent) — `labour_classification` on ScheduleBlock, conservative default, filters the recommendation pipeline only. |
 
 ## Architecture Decisions
 
@@ -2331,6 +2332,138 @@ MTD/YTD with the "no cycles closed yet" sub-label, "—" adoption with
 correctly shows real zeros with context, not broken-looking blanks.
 Confirmed mobile layout (375px): checklist items wrap correctly, stat
 cards stack to a single column, nothing overflows.
+
+---
+
+## New Feature: Labour-Aware Shiftable Load Classification
+
+### Objective
+
+Customer discovery found that a significant share of technically-shiftable
+load can only actually be shifted if a person changes when they work
+(night shifts, overtime, operator availability). Recommending those
+shifts as if they were free — the same as flipping on a compressor at a
+cheaper hour — overstates savings and costs trust. This is genuinely new
+product scope, not a v2 port: v2 has no such concept anywhere in its
+source. Unlike every other ADR in this document, there's no "matches
+v2" to verify against — the standard here is the brief this stage was
+commissioned against, verified by re-reading it against the actual
+domain model before writing code.
+
+### ADR-86: `labour_classification` lives on `ScheduleBlock`, as a property, not a second load-taxonomy table
+
+The brief's own core principle — "not another load category, a property
+of a load" — maps directly onto this codebase's existing "shiftable
+load" concept: `ScheduleBlock` (asset/line, start/end, estimated kWh),
+already the exact unit `RunOptimizationAction` feeds to the
+recommendation engine. A new `LabourClassification` string-backed enum
+(`Unmanned` / `LabourBound`) was added as one more column on that
+existing table, not a new domain or a parallel model — the same pattern
+`estimated_kwh` itself already established (a nullable attribute that
+gates eligibility, not a reason to fork the schema).
+
+### ADR-87: The DB-level default is `LABOUR_BOUND`, not `UNMANNED` — every existing and future unclassified block starts conservative
+
+The migration (`add_labour_classification_to_schedule_blocks_table`)
+sets the column's default to `LABOUR_BOUND` at the schema level. This
+means every schedule block that existed before this migration ran
+retroactively becomes ineligible for future optimization runs until a
+human explicitly reclassifies it as Unmanned — a deliberate behavior
+change, not a migration hazard, per the brief's own instruction:
+"prefer a conservative default that prevents misleading customer-facing
+recommendations until the load has been explicitly classified."
+`AddScheduleBlockAction::execute()`'s own PHP-level default parameter
+matches the same value, so any caller that omits the argument (a future
+API integration, a bulk importer) gets the identical conservative
+behavior as a raw insert would — one default, expressed consistently at
+both layers, not two independent decisions that could drift apart.
+
+The portal's own form never actually relies on either default silently
+— `StoreScheduleBlockRequest` requires the field explicitly, and the
+`AddBlockForm` select always renders a real, visible selection
+(pre-set to Labour Bound) rather than a blank/placeholder option, so a
+customer marking something Unmanned is always a deliberate action, never
+an accident of an unfilled dropdown.
+
+### ADR-88: One centralized eligibility check, `ScheduleBlock::isEligibleForOptimization()` — replaces `RunOptimizationAction`'s old inline kWh-only filter, extensible for future constraints
+
+`RunOptimizationAction` used to filter its candidate blocks with one
+inline closure (`estimated_kwh !== null`). That's now
+`ScheduleBlock::isEligibleForOptimization()` — kWh present AND
+`labour_classification === Unmanned` — called from the one place that
+used to have the old check, with the recommendation engine itself
+(`RecommendationEngine`, `ProvisionalWindowShiftStrategy`) completely
+untouched: it never learns a labour-bound block existed, matching the
+brief's explicit "the optimization algorithms themselves should remain
+unchanged, only the eligible input set changes." Per the brief's own
+extensibility ask ("additional operational constraints... without major
+refactoring"), a future constraint (a maintenance window, a regulatory
+restriction) is one more condition inside that single method, not a
+second filter to keep in sync at every call site.
+
+### ADR-89: Savings/verification figures (MTD/YTD, ROI) are NOT filtered by labour classification — they have no per-block breakdown to filter, and building one would itself be a new optimization engine
+
+Investigated before writing any code: `SavingsAssessment`/
+`VerificationRecord` (the numbers behind the portal dashboard's
+MTD/YTD stat cards and every ROI/invoice figure) are computed by
+`ProvisionalHeuristicStrategy`/`ProvisionalPeriodComparisonStrategy`
+directly from aggregate meter readings against day-ahead prices — a
+whole-site heuristic ("shift 30% of every hour's load into that day's
+3 cheapest hours"), with no concept of individual `ScheduleBlock`s at
+all, and no v2 precedent that decomposes it into one. There is nothing
+architecturally correct to filter by labour classification at that
+layer without inventing a new per-load decomposition of a heuristic
+that was never per-load to begin with — which the brief explicitly
+rules out ("we are not creating a new optimization engine"). The
+labour filter applies fully and correctly to everything that actually
+is derived from individual blocks: `Recommendation` rows (so
+`projected_savings_cents`, the dashboard's "Recent recommendations"
+and "Recommendations followed" adoption rate, and every report table
+built from them) can now only ever exist for Unmanned blocks, since
+`RunOptimizationAction` never sees a labour-bound one. No carbon data
+exists anywhere in this domain either (checked directly, not assumed)
+— the brief's carbon-reduction bullet is inapplicable, not
+unimplemented.
+
+### ADR-90: Frontend — a required select on the add-block form, a read-only badge everywhere blocks are already displayed, no new pages
+
+`Portal/Schedule.tsx`'s `AddBlockForm` gained one more field (Labour
+classification, pre-set to Labour Bound); its blocks table and
+`Portal/ScheduleHistory.tsx`'s read-only reconstruction view both gained
+a "Labour" column rendering a small `LabourClassificationBadge` (`navy`
+for Unmanned, `mid` for Labour Bound — reusing this app's existing Badge
+variants and their established semantics rather than inventing a third
+color). The "why can't I run optimization" hint text and the prop
+driving it (`hasBlocksWithEstimatedKwh` → `hasEligibleBlocks`) now
+reflect the real, full eligibility condition rather than just its kWh
+half. No new page, no new navigation entry — labour classification is a
+column on data already shown on pages that already exist, per the
+brief's own instruction to integrate with existing architecture rather
+than build parallel UI.
+
+### ADR-91: Validation
+
+10 new/updated tests: `ScheduleBlockEligibilityTest` (all 4 kWh ×
+classification combinations), `RunOptimizationActionTest` (a
+labour-bound block with a valid kWh sitting in the most expensive price
+hour of the day produces zero recommendations — proving the filter
+actually excludes it, not just that an all-labour-bound schedule throws
+early), `AddScheduleBlockActionTest` (default vs. explicit
+classification), `ScheduleControllerTest` (required/enum validation,
+persisted value, `hasEligibleBlocks` reflecting real state). Full suite:
+512/512 passing (1,715 assertions, up from 501/1,689). `tsc --noEmit`,
+ESLint, and Pint all clean; `vite build` succeeded.
+
+Live smoke test against a freshly migrated dev database: added one
+Unmanned block (Compressor 1) and one Labour Bound block (Welding
+Station A) through the real form, confirmed both badges render
+correctly on both the Schedule page and Schedule History, confirmed the
+"Run optimization" button only appeared once the Unmanned block existed,
+and confirmed triggering it produced "No price data covers your
+schedule's dates yet" rather than "No schedule blocks are eligible for
+optimization yet" — proving the Unmanned block was correctly accepted
+as a candidate and the pipeline proceeded past the eligibility check to
+the next real validation step, live, not just in the test suite.
 
 ---
 

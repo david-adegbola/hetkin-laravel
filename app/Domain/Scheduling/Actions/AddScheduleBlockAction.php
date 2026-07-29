@@ -8,6 +8,7 @@ use App\Domain\Audit\Services\AuditLogService;
 use App\Domain\Metering\Models\Site;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Scheduling\Enums\LabourClassification;
 use App\Domain\Scheduling\Enums\ScheduleStatus;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Domain\Scheduling\Models\ScheduleBlock;
@@ -38,6 +39,14 @@ use Illuminate\Support\Facades\DB;
  * src/lib/onboarding-status.ts's cache invalidation is omitted — no
  * onboarding checklist exists yet in this port, not silently dropped; see
  * MIGRATION_PLAN.md ADR-29/32.
+ *
+ * `$labourClassification` defaults to LabourClassification::LabourBound —
+ * matching the creating migration's DB-level default, not overriding it
+ * more permissively — so a caller (a future API integration, a bulk
+ * importer) that omits the argument gets the same conservative behavior
+ * as a raw INSERT would. The portal's own form (StoreScheduleBlockRequest)
+ * always sends an explicit value; this default exists for every other
+ * caller.
  */
 class AddScheduleBlockAction
 {
@@ -53,12 +62,13 @@ class AddScheduleBlockAction
         Carbon $startAt,
         Carbon $endAt,
         ?float $estimatedKwh,
+        LabourClassification $labourClassification = LabourClassification::LabourBound,
     ): ScheduleBlock {
         $previousOrganization = $this->currentOrganization->get();
         $this->currentOrganization->set($organization);
 
         try {
-            return DB::transaction(function () use ($organization, $user, $assetLabel, $startAt, $endAt, $estimatedKwh) {
+            return DB::transaction(function () use ($organization, $user, $assetLabel, $startAt, $endAt, $estimatedKwh, $labourClassification) {
                 $site = Site::query()->firstWhere('organization_id', $organization->id);
                 if (! $site) {
                     $site = Site::create([
@@ -87,6 +97,7 @@ class AddScheduleBlockAction
                     'start_at' => $startAt,
                     'end_at' => $endAt,
                     'estimated_kwh' => $estimatedKwh,
+                    'labour_classification' => $labourClassification,
                 ]);
 
                 $this->auditLogService->record(new AuditEvent(
