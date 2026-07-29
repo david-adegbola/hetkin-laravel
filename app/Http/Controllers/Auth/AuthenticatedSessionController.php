@@ -75,6 +75,17 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
+        // Post-Stage-14 ADR: without this, Inertia's OWN client-side
+        // history-state cache (separate from, and untouched by, the
+        // PreventBackHistoryCache response headers below) still holds this
+        // session's pre-logout pages in the browser's `history.state` —
+        // pressing back would restore one of them instantly from memory,
+        // no network request, no chance for auth middleware to catch it.
+        // This flags the SIGN-IN response the client is about to receive
+        // to clear its history-encryption key, so no earlier entry from
+        // this session can be decrypted afterward.
+        Inertia::clearHistory();
+
         return redirect('/');
     }
 }

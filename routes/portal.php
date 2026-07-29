@@ -10,6 +10,7 @@ use App\Http\Controllers\Portal\SupportController;
 use App\Http\Controllers\Portal\TeamController;
 use App\Http\Middleware\PreventBackHistoryCache;
 use Illuminate\Support\Facades\Route;
+use Inertia\EncryptHistoryMiddleware;
 
 /**
  * Customer portal route DEFINITIONS, shared between two mount points
@@ -47,9 +48,24 @@ use Illuminate\Support\Facades\Route;
  * ADR) as the security fix that closes that gap: this is exactly the
  * sensitive, session-scoped content bfcache restoration was meant to
  * protect.
+ *
+ * `EncryptHistoryMiddleware` (Post-Stage-14 ADR) covers a DIFFERENT
+ * restoration path `PreventBackHistoryCache` cannot: Inertia keeps its own
+ * client-side history-state cache (in `window.history.state`, restored on
+ * `popstate` — see @inertiajs/core's Router.handlePopstateEvent) entirely
+ * independent of the browser's HTTP cache/bfcache, so it isn't affected by
+ * response Cache-Control headers at all. Without this, pressing back after
+ * signing out re-displays the last-visited authenticated page's data
+ * INSTANTLY from that in-memory cache — no network request, so no
+ * opportunity for the auth middleware to catch it. This middleware
+ * encrypts that history state per-session; `Inertia::clearHistory()` (see
+ * App\Http\Controllers\Auth\AuthenticatedSessionController::destroy())
+ * invalidates the encryption key on logout, so a subsequent back-navigation
+ * can no longer decrypt any pre-logout entry and correctly falls through
+ * to a real server request instead.
  */
 return function (): void {
-    Route::middleware(['auth:web', 'organization.context', PreventBackHistoryCache::class])->group(function () {
+    Route::middleware(['auth:web', 'organization.context', PreventBackHistoryCache::class, EncryptHistoryMiddleware::class])->group(function () {
         Route::get('/', [DashboardController::class, 'show'])->name('dashboard');
 
         Route::get('data', [DataController::class, 'index'])->name('data');

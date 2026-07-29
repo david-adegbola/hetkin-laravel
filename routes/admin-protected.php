@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\TeamController;
 use App\Http\Controllers\Admin\VerificationController;
 use App\Http\Middleware\PreventBackHistoryCache;
 use Illuminate\Support\Facades\Route;
+use Inertia\EncryptHistoryMiddleware;
 use Inertia\Inertia;
 
 /**
@@ -53,7 +54,14 @@ return function (): void {
         // cross-tenant organization data, invoices, and audit logs — the
         // bfcache-restoration risk the middleware exists for applies at
         // least as much here as it does to the customer portal.
-        Route::middleware(['admin.active', PreventBackHistoryCache::class])->group(function () {
+        //
+        // EncryptHistoryMiddleware (Post-Stage-14 ADR) — see routes/
+        // portal.php's docblock for why this is a separate mechanism from
+        // PreventBackHistoryCache, not a duplicate of it: Inertia's own
+        // client-side history-state cache restores a page from memory on
+        // back-navigation without ever hitting the network, so response
+        // Cache-Control headers alone can't prevent it.
+        Route::middleware(['admin.active', PreventBackHistoryCache::class, EncryptHistoryMiddleware::class])->group(function () {
             // Deliberately NOT registered at bare '/' — on the admin
             // subdomain, bare '/' is already claimed by
             // routes/domains.php's `admin.subdomain.home` (always the

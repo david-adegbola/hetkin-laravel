@@ -53,6 +53,11 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
+        // See App\Http\Controllers\Auth\AuthenticatedSessionController's
+        // destroy() for why this is needed — same fix, same reasoning,
+        // admin realm.
+        Inertia::clearHistory();
+
         return redirect()->route('admin.login');
     }
 }

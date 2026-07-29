@@ -79,7 +79,7 @@ review) — building it earlier would mean building it twice.
 | Platform audit: Labour Classification consistency | **Complete** | ADR-92..ADR-95. Marketing/docs copy corrected in 4 places; every Recommendation-derived surface confirmed already correct by construction. |
 | 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
 | 14. Progressive Web Application (PWA) | **Complete** | ADR-103..ADR-109. Customer portal and admin console each install as independent PWAs (own manifest/scope/icons/cache); hand-rolled classic-script Service Worker allow-lists only static assets, never protected content; install eligibility gated server-side (`PwaSurface`) and kept correct across in-app SPA navigation. Three bugs caught by design review before implementation, a fourth (SPA-navigation sync) found via live browser testing — see [PWA.md](PWA.md). |
-| Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110. User-raised question surfaced the customer portal had no sign-out link at all; added one, and live-testing it found the admin console's own "Sign out" had a pre-existing, unrelated nested-`<button>` bug that silently broke it too — both fixed. |
+| Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110..ADR-111. User-raised question surfaced the customer portal had no sign-out link at all (added one; found and fixed a pre-existing nested-`<button>` bug that silently broke the admin console's own "Sign out" too), then that pressing back afterward still restored the stale authenticated page — traced to Inertia's own client-side history cache (a third mechanism, distinct from ADR-14's HTTP headers), fixed via `Inertia::clearHistory()` + `EncryptHistoryMiddleware`. |
 
 ## Architecture Decisions
 
@@ -3233,6 +3233,82 @@ this fix, confirmed via the same nested-button check — now correctly
 signs out and lands on the admin sign-in page too.
 
 Full suite (527/527), Pint, PHPStan, and `tsc --noEmit` all stayed clean.
+
+### ADR-111: Sign-out worked, but the user reported pressing browser "back" afterward still showed the old authenticated page — traced to a THIRD, previously-unknown history-restoration mechanism, distinct from both ADR-14 and ADR-110
+
+Reproduced exactly as described: sign in, navigate to `/schedule`, sign
+out (ADR-110's now-working button), press browser back — the stale,
+pre-logout Schedule page content reappeared instead of the sign-in page.
+
+The investigation ruled out the two mechanisms already understood and
+defended against:
+
+- **`PreventBackHistoryCache` (ADR-14)'s HTTP headers were not the
+  problem.** A direct `curl` check confirmed `/schedule` correctly sent
+  `Cache-Control: no-store, no-cache, must-revalidate, private` — exactly
+  as that middleware sets it. (An earlier `fetch()`-based check from
+  inside the browser tool had suggested otherwise; that reading turned
+  out to be unreliable — the curl check, closest to what actually goes
+  over the wire, was the one to trust.)
+- **A fresh, unauthenticated server request to `/schedule` correctly
+  redirected to the sign-in page** (`authUser: null` in the response's
+  Inertia page data) — so the session itself genuinely was destroyed.
+  Whatever was restoring the old page was happening entirely client-side,
+  without a network request at all.
+
+Reading `@inertiajs/core`'s router source directly found the real cause:
+Inertia keeps its **own** client-side history-state cache, in
+`window.history.state`, restored on `popstate` (`Router.
+handlePopstateEvent`) — completely independent of the browser's HTTP
+cache or bfcache, and therefore untouched by any `Cache-Control` header.
+On back-navigation, Inertia decrypts/reads the previously-visited page's
+stored props directly from that history entry and re-renders it
+instantly, with no server round-trip at all — which is exactly the
+"instant back-navigation" behavior Inertia is designed to provide, and
+exactly why neither ADR-14's headers nor ADR-110's now-working sign-out
+button could have caught this: there's no request for a middleware to
+intercept.
+
+Confirmed the mechanism precisely before fixing it: manually dispatching
+a synthetic `pageshow` event with `persisted: true` (the same signal
+`app.tsx`'s existing bfcache-fallback listener watches for) correctly
+triggered a real reload and redirect — proving that listener's own logic
+was sound, but that a genuine back-button press wasn't reliably producing
+that signal for this specific restoration path, since it isn't a bfcache
+restoration in the first place.
+
+Fixed using Inertia's own purpose-built mechanism for exactly this
+problem, not another custom listener:
+
+- `Inertia\EncryptHistoryMiddleware` added to all three authenticated
+  route groups (`routes/portal.php`, `routes/admin-protected.php`,
+  `routes/settings.php` — the same three `PreventBackHistoryCache`
+  already covers) — encrypts each response's history-state payload per
+  session.
+- `Inertia::clearHistory()` called in both `AuthenticatedSessionController
+  ::destroy()` methods (customer and admin), right before the redirect —
+  flags the very next Inertia response (the sign-in page) to invalidate
+  the encryption key. Any earlier, still-cached history entry from that
+  session becomes permanently undecryptable; Inertia's own router falls
+  through to `onMissingHistoryItem()` (a real server request) rather than
+  restoring it, which correctly hits the dead session and redirects to
+  sign-in.
+
+This is a distinct, complementary mechanism to ADR-14's response
+headers, not a duplicate of it — one governs the browser's HTTP/bfcache
+layer, the other governs Inertia's own separate in-memory history cache.
+Both are needed; neither alone would have closed this gap.
+
+`tests/Feature/HistoryEncryptionTest.php` (new) asserts `encryptHistory:
+true` appears on portal/admin/settings responses and `clearHistory: true`
+appears on the response immediately following each logout — reading the
+page object directly out of the initial HTML's `data-page` attribute
+rather than sending `X-Inertia: true` (a version-less Inertia XHR request
+409s, and matching the real asset version just to read two booleans
+would be more machinery than the assertion is worth). Re-verified live in
+the browser, repeating the exact reported flow: sign in → navigate →
+sign out → press back now correctly shows the sign-in page, no flash of
+stale content. Full suite (532/532), Pint, and PHPStan all stayed clean.
 
 ---
 

@@ -5,6 +5,7 @@ use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SessionController;
 use App\Http\Middleware\PreventBackHistoryCache;
 use Illuminate\Support\Facades\Route;
+use Inertia\EncryptHistoryMiddleware;
 
 /**
  * Customer realm, Account Security module. Every route here requires a
@@ -12,9 +13,12 @@ use Illuminate\Support\Facades\Route;
  * re-auth checkpoint before sensitive account changes, per the brief.
  * `PreventBackHistoryCache` is listed explicitly rather than inherited from
  * a global group; see that middleware's docblock for why authenticated-only
- * scoping has to be deliberate, not blanket.
+ * scoping has to be deliberate, not blanket. `EncryptHistoryMiddleware`
+ * (Post-Stage-14 ADR) is the same pairing routes/portal.php uses — see its
+ * docblock for why this is a distinct mechanism from PreventBackHistoryCache,
+ * not a duplicate of it.
  */
-Route::middleware(['auth:web', 'auth.session', PreventBackHistoryCache::class])
+Route::middleware(['auth:web', 'auth.session', PreventBackHistoryCache::class, EncryptHistoryMiddleware::class])
     ->prefix('settings')
     ->name('settings.')
     ->group(function () {
