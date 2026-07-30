@@ -1,5 +1,4 @@
 import { Button } from '@/Components/ui/Button';
-import * as Sentry from '@sentry/react';
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 type Realm = 'portal' | 'admin' | 'default';
@@ -48,6 +47,19 @@ interface State {
  * Reports via Sentry.captureException, same as every one of v2's four
  * boundaries — a no-op when VITE_SENTRY_DSN is unset (resources/js/lib/
  * sentry.ts).
+ *
+ * `@sentry/react` is dynamically imported here rather than statically,
+ * same Stage 15 perf reasoning as app.tsx's own initSentry() call: a
+ * static `import * as Sentry` pulled the full SDK into this component's
+ * bundle regardless of whether a crash ever happens, and this component
+ * wraps the entire app (app.tsx), so that weight landed in the single
+ * critical entry chunk every visitor downloads. componentDidCatch only
+ * runs on an actual render crash — a rare path where a few hundred
+ * milliseconds' extra latency to fetch the SDK chunk (already a browser
+ * cache hit in practice, since app.tsx's own dynamic import of
+ * resources/js/lib/sentry.ts pulls in the same `@sentry/react` module
+ * specifier at boot) is a fully acceptable trade for not shipping it to
+ * every visitor who never hits an error.
  */
 export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     state: State = { hasError: false };
@@ -57,8 +69,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-        Sentry.captureException(error, {
-            contexts: { react: { componentStack: errorInfo.componentStack } },
+        void import('@sentry/react').then((Sentry) => {
+            Sentry.captureException(error, {
+                contexts: {
+                    react: { componentStack: errorInfo.componentStack },
+                },
+            });
         });
     }
 

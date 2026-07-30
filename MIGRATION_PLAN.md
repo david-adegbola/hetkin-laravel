@@ -3612,3 +3612,52 @@ on both the portal and admin surfaces. Full suite green (537/537), Pint,
 PHPStan (`--memory-limit=512M` — the default 128M crashed mid-run on
 this machine, an environmental limit unrelated to this change, not a
 code issue), `tsc --noEmit`, and `npm run build` all clean.
+
+### ADR-118: Bundle splitting — the 615kB main chunk Vite's own build kept warning about was two statically-imported analytics SDKs, not app code
+
+`npm run build` had warned "Some chunks are larger than 500 kB" since
+Stage 11 introduced PostHog/Sentry, pointing at a single `app-*.js` entry
+chunk of 615.58kB (201.97kB gzip) every visitor downloaded and parsed
+before the app could render anything, on every page including the
+marketing homepage. Page components themselves were already correctly
+split per-route (Inertia's `resolvePageComponent` +
+`import.meta.glob('./Pages/**/*.tsx')` in app.tsx, unchanged) — the
+500kB was almost entirely two optional, best-effort integrations
+(`resources/js/lib/analytics.ts`'s `posthog-js` import, `lib/sentry.ts`'s
+`@sentry/react` import) pulled in via static `import` statements at the
+top of `app.tsx`, which forces Rollup to inline them into the same
+critical chunk as the framework bootstrap code, whether or not
+`VITE_POSTHOG_KEY`/`VITE_SENTRY_DSN` are even set.
+
+Switched both to dynamic `import()` in `app.tsx`
+(`void import('./lib/sentry').then(({ initSentry }) => initSentry())`,
+same pattern for analytics) — each becomes its own chunk, fetched in
+parallel without blocking the main chunk's parse/execute. That alone
+only fixed PostHog: `Components/ErrorBoundary.tsx` had its own static
+`import * as Sentry from '@sentry/react'` (needed synchronously in
+`componentDidCatch`), which kept forcing Sentry's code back into the
+critical path regardless of what app.tsx did — confirmed by the first
+rebuild's `sentry-*.js` chunk being a suspicious 0.03kB stub, meaning
+Rollup had deduped it away into the main chunk rather than actually
+splitting it. Fixed by making `componentDidCatch` dynamically `import('@sentry/react')`
+too. Accepted trade-off, documented in that file's own docblock: a
+render crash in the first instant after page load could theoretically
+fire before the SDK chunk resolves, acceptable because server-side
+Sentry (`Integration::handles()`, `bootstrap/app.php`) is this app's
+primary error-capture layer and the boundary's own fallback UI still
+displays regardless of whether the report went through.
+
+Result: main chunk 615.58kB → 380.24kB (201.97kB → 124.76kB gzip, a 38%
+cut), now under Vite's 500kB warning threshold — confirmed by its
+absence from a clean `npm run build` afterward. PostHog
+(`analytics-*.js`, 222.94kB/73.82kB gzip) and Sentry
+(`sentry-*.js`+`esm-*.js`, ~12kB/~4kB gzip — smaller than expected,
+since neither Replay nor Browser Tracing integrations are used) now load
+as separate parallel requests instead of blocking first paint. Verified
+live: `npm run build` + `php artisan serve`, both chunk files fetched
+(200 OK) on initial page load without blocking render, zero console
+errors, portal/admin pages still render and authenticate correctly
+post-change (ErrorBoundary wraps the entire app, so its edit was the
+highest-risk part of this change to get wrong). Full suite green
+(537/537), `tsc --noEmit` and `eslint` clean, no PHP changes so no
+PHPStan re-run needed.

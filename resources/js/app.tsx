@@ -7,11 +7,25 @@ import type { PageProps } from '@/types';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
-import { initPostHog } from './lib/analytics';
-import { initSentry } from './lib/sentry';
 
-initSentry();
-initPostHog();
+// Stage 15 perf pass: dynamic, not static, imports. @sentry/react and
+// posthog-js are both sizeable SDKs (see MIGRATION_PLAN.md's Stage 15
+// ADR — together they were a meaningful share of the ~615kB single
+// entry chunk Vite's own build warned about) for integrations that are
+// explicitly best-effort — both `initSentry()`/`initPostHog()` already
+// no-op cleanly if their env var is unset, "fails open" being the
+// documented posture in each. A static import forced their full SDK
+// weight into the critical bundle the browser must parse before any
+// page renders; a dynamic import turns each into its own chunk, fetched
+// in parallel without blocking first paint. Traded off deliberately:
+// there's a small window where an error during the very first render
+// could fire before Sentry.init() resolves — acceptable because
+// server-side Sentry (Integration::handles(), bootstrap/app.php) is
+// this app's primary error-capture layer, client-side is documented as
+// supplementary, and ErrorBoundary below still catches and displays any
+// render crash regardless of whether Sentry was ready to report it.
+void import('./lib/sentry').then(({ initSentry }) => initSentry());
+void import('./lib/analytics').then(({ initPostHog }) => initPostHog());
 
 // MIGRATION_PLAN.md Stage 14 — re-synced on EVERY Inertia navigation, not
 // just once here at boot. Inertia never re-renders resources/views/
