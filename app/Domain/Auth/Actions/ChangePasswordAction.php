@@ -8,6 +8,8 @@ use App\Domain\Audit\Services\AuditLogService;
 use App\Models\User;
 use App\Notifications\PasswordChanged;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Authenticated "change password" — current-password and strength/
@@ -46,6 +48,15 @@ class ChangePasswordAction
             return $revoked;
         });
 
-        $user->notify(new PasswordChanged(hadOtherActiveSessions: $otherSessionsRevoked > 0));
+        // The password is already changed above — a failure to send this
+        // courtesy confirmation email must never turn that success into a
+        // 500 for the user. Same posture as every other post-hoc
+        // notification in this app; see SubmitPilotApplicationAction's
+        // docblock for the incident that established the pattern.
+        try {
+            $user->notify(new PasswordChanged(hadOtherActiveSessions: $otherSessionsRevoked > 0));
+        } catch (Throwable $e) {
+            Log::error('[auth] failed to send password-changed notification', ['exception' => $e, 'userId' => $user->id]);
+        }
     }
 }

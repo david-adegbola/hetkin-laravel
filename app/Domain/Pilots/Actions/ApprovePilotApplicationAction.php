@@ -15,8 +15,10 @@ use App\Domain\Pilots\Models\PilotApplication;
 use App\Models\AdminUser;
 use App\Notifications\PilotApplicationApproved;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Ports the Next.js app's approvePilotApplication() Server Action exactly
@@ -91,12 +93,25 @@ class ApprovePilotApplicationAction
             return new ApprovePilotApplicationResult($application->refresh(), $organization, $invitation);
         });
 
-        Notification::route('mail', $application->contact_email)
-            ->notify(new PilotApplicationApproved(
-                $result->invitation,
-                $application->contact_name,
-                $result->organization->name,
-            ));
+        // The Organization + Invitation are already committed above, and
+        // the invite link stays available in the admin Pilots page
+        // (PilotApplicationController::index's `invite_url`) regardless of
+        // whether this email goes out — an admin can always copy/paste it
+        // manually. A send failure here must not turn the already-
+        // successful approval into a 500. Same posture as every other
+        // post-hoc notification in this app; see
+        // SubmitPilotApplicationAction's docblock for the incident that
+        // established the pattern.
+        try {
+            Notification::route('mail', $application->contact_email)
+                ->notify(new PilotApplicationApproved(
+                    $result->invitation,
+                    $application->contact_name,
+                    $result->organization->name,
+                ));
+        } catch (Throwable $e) {
+            Log::error('[pilots] failed to send application-approved notification', ['exception' => $e, 'applicationId' => $application->id]);
+        }
 
         // Phase 1 §8 funnel: "Qualification → Approval". Same distinctId
         // (contact email) as pilot_application_submitted, so the two

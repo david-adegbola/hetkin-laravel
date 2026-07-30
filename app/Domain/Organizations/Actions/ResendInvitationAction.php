@@ -5,11 +5,14 @@ namespace App\Domain\Organizations\Actions;
 use App\Domain\Audit\DTOs\AuditEvent;
 use App\Domain\Audit\Enums\AuditActorType;
 use App\Domain\Audit\Services\AuditLogService;
+use App\Domain\Organizations\Exceptions\OrganizationActionException;
 use App\Domain\Organizations\Models\Invitation;
 use App\Models\AdminUser;
 use App\Notifications\InvitationResent;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 /**
  * Ports the Next.js app's resendInvitation() Server Action exactly
@@ -29,6 +32,16 @@ use Illuminate\Support\Facades\Notification;
  * record() enforces an active transaction unconditionally though, so this
  * wraps the audit write alone in one — a mechanical necessity, not a
  * behavior change.
+ *
+ * Unlike this app's other post-hoc notifications (a courtesy email sent
+ * after the real state change already succeeded — see
+ * App\Domain\Pilots\Actions\SubmitPilotApplicationAction's docblock), the
+ * email here IS the entire point of "resend": there is no other state
+ * change to fall back on. A send failure is therefore reported to the
+ * caller as a OrganizationActionException (same "business-rule failure,
+ * show this message, don't 500" contract this domain's other Actions use)
+ * rather than caught-and-ignored — and, correctly, no audit entry gets
+ * written for a resend that didn't actually happen.
  */
 class ResendInvitationAction
 {
@@ -36,14 +49,23 @@ class ResendInvitationAction
         private readonly AuditLogService $auditLogService,
     ) {}
 
+    /**
+     * @throws OrganizationActionException
+     */
     public function execute(Invitation $invitation, AdminUser $adminUser): void
     {
         if ($invitation->status !== 'pending') {
             return;
         }
 
-        Notification::route('mail', $invitation->email)
-            ->notify(new InvitationResent($invitation, $invitation->organization->name));
+        try {
+            Notification::route('mail', $invitation->email)
+                ->notify(new InvitationResent($invitation, $invitation->organization->name));
+        } catch (Throwable $e) {
+            Log::error('[organizations] failed to resend invitation email', ['exception' => $e, 'invitationId' => $invitation->id]);
+
+            throw new OrganizationActionException('Could not send the invitation email. Please try again shortly.');
+        }
 
         DB::transaction(function () use ($invitation, $adminUser) {
             $this->auditLogService->record(new AuditEvent(

@@ -9,9 +9,11 @@ use App\Domain\Auth\Models\SessionRecord;
 use App\Models\User;
 use App\Notifications\PasswordResetCompleted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Wraps Laravel's Password Broker for the actual reset. Token/expiry
@@ -59,7 +61,17 @@ class ResetPasswordAction
                     ));
                 });
 
-                $user->notify(new PasswordResetCompleted);
+                // The reset is already complete above (password saved,
+                // sessions cleared, audit logged) — a failed courtesy
+                // confirmation email must not turn that success into a
+                // 500. Same posture as every other post-hoc notification
+                // in this app; see SubmitPilotApplicationAction's docblock
+                // for the incident that established the pattern.
+                try {
+                    $user->notify(new PasswordResetCompleted);
+                } catch (Throwable $e) {
+                    Log::error('[auth] failed to send password-reset-completed notification', ['exception' => $e, 'userId' => $user->id]);
+                }
             },
         );
 

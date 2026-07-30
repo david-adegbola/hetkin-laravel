@@ -282,7 +282,11 @@ class OrganizationController extends Controller
             ->where('organization_id', $organization->id)
             ->findOrFail($invitation);
 
-        $action->execute($invitationModel, $this->admin());
+        try {
+            $action->execute($invitationModel, $this->admin());
+        } catch (OrganizationActionException $e) {
+            throw ValidationException::withMessages(['invitation' => $e->getMessage()]);
+        }
 
         return back();
     }

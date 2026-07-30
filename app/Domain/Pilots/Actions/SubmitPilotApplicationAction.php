@@ -12,7 +12,9 @@ use App\Domain\Pilots\Models\PilotApplication;
 use App\Domain\Pilots\Services\IcpScoreCalculator;
 use App\Notifications\PilotApplicationSubmitted;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 /**
  * Ports the Next.js app's submitPilotApplication() Server Action exactly
@@ -65,8 +67,24 @@ class SubmitPilotApplicationAction
             return $application;
         });
 
-        Notification::route('mail', config('mail.pilot_notification_address'))
-            ->notify(new PilotApplicationSubmitted($application));
+        // The application row above is already committed by this point —
+        // a failure to notify the internal team about it is real (Sentry
+        // still sees it, via the catch below) but must never turn an
+        // applicant's already-successful submission into a visible 500,
+        // same "log instead of crash, never block the real work" posture
+        // App\Domain\Analytics\Services\PostHogService's docblock
+        // documents for every other optional integration in this app.
+        // PilotApplicationSubmitted's own docblock assumed this send could
+        // never fail here (it always targets the Resend account owner's
+        // inbox) — true only once a sending domain is verified in Resend;
+        // an unverified domain rejects sends to any other address, which
+        // is exactly what surfaced this as an uncaught 500 in production.
+        try {
+            Notification::route('mail', config('mail.pilot_notification_address'))
+                ->notify(new PilotApplicationSubmitted($application));
+        } catch (Throwable $e) {
+            Log::error('[pilots] failed to send internal application-submitted notification', ['exception' => $e]);
+        }
 
         // Phase 1 §8 funnel: "Visitor → Pilot Request". distinctId is the
         // contact's email, not a user id — no account exists yet at this

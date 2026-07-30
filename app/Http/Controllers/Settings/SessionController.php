@@ -12,6 +12,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SessionController extends Controller
 {
@@ -43,7 +45,16 @@ class SessionController extends Controller
         $revoked = $action->execute($user, $request->session()->getId());
 
         if ($revoked > 0) {
-            $user->notify(new LoggedOutAllDevices);
+            // The other sessions are already revoked above — a failed
+            // courtesy security alert must not turn that success into a
+            // 500. Same posture as every other post-hoc notification in
+            // this app; see SubmitPilotApplicationAction's docblock for
+            // the incident that established the pattern.
+            try {
+                $user->notify(new LoggedOutAllDevices);
+            } catch (Throwable $e) {
+                Log::error('[auth] failed to send logged-out-all-devices notification', ['exception' => $e, 'userId' => $user->id]);
+            }
         }
 
         return back()->with('status', 'other-sessions-logged-out');

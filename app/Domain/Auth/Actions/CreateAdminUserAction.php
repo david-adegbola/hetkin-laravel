@@ -11,6 +11,8 @@ use App\Domain\Auth\Exceptions\AdminTeamActionException;
 use App\Models\AdminUser;
 use App\Notifications\AdminAccountCreated;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Ports the Next.js app's createAdminUser() Server Action exactly (src/app/
@@ -83,7 +85,18 @@ class CreateAdminUserAction
             return $adminUser;
         });
 
-        $adminUser->notify(new AdminAccountCreated($name, $roleEnum, $creator->name));
+        // The account is already created and its temp password is about to
+        // be returned to the creating admin's own UI (this email never
+        // carries it — see AdminAccountCreated's docblock) — a failed
+        // courtesy email here must not turn that success into a 500. Same
+        // posture as every other post-hoc notification in this app; see
+        // SubmitPilotApplicationAction's docblock for the incident that
+        // established the pattern.
+        try {
+            $adminUser->notify(new AdminAccountCreated($name, $roleEnum, $creator->name));
+        } catch (Throwable $e) {
+            Log::error('[auth] failed to send admin-account-created notification', ['exception' => $e, 'adminUserId' => $adminUser->id]);
+        }
 
         return new CreateAdminUserResult($adminUser, $tempPassword);
     }

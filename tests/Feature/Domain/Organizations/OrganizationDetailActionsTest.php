@@ -170,6 +170,17 @@ test('is a silent no-op for a non-pending invitation', function () {
     expect(AuditLogEntry::query()->count())->toBe(0);
 });
 
+test('a failed email send throws a friendly error and writes no audit entry — unlike other post-hoc notifications, the email IS the resend', function () {
+    config(['mail.default' => 'this-mailer-does-not-exist']);
+    $invitation = Invitation::factory()->create();
+    $admin = AdminUser::factory()->create();
+
+    expect(fn () => app(ResendInvitationAction::class)->execute($invitation, $admin))
+        ->toThrow(OrganizationActionException::class);
+
+    expect(AuditLogEntry::query()->where('action', 'invitation.resent')->count())->toBe(0);
+});
+
 // --- ErasePersonalDataAction --------------------------------------------------
 
 test('rejects a slug that does not match', function () {

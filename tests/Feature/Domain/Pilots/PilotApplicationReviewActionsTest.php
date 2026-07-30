@@ -77,6 +77,18 @@ test('sends the invitation email to the applicant contact', function () {
     );
 });
 
+test('a failed applicant notification does not prevent the organization and invitation from being created', function () {
+    config(['mail.default' => 'this-mailer-does-not-exist']);
+    $application = PilotApplication::factory()->create();
+    $admin = AdminUser::factory()->create();
+
+    $result = app(ApprovePilotApplicationAction::class)->execute($application, $admin);
+
+    expect($result->organization->exists)->toBeTrue();
+    expect($result->invitation->exists)->toBeTrue();
+    expect($application->refresh()->status)->toBe(PilotApplicationStatus::Approved);
+});
+
 test('writes an audit log entry with organization and invitation ids', function () {
     Notification::fake();
     $application = PilotApplication::factory()->create();

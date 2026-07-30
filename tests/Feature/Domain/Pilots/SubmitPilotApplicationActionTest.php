@@ -68,3 +68,22 @@ test('notifies the internal team, not the applicant', function () {
         fn ($notification, $channels, $notifiable) => $notifiable->routes['mail'] === config('mail.pilot_notification_address'),
     );
 });
+
+/*
+ * Regression coverage for a real production incident: the internal
+ * notification send used to be unguarded, so a Resend failure (e.g. an
+ * unverified sending domain rejecting the destination address) threw all
+ * the way up through the controller, turning an already-successful
+ * application submission into a visible 500 for the applicant — even
+ * though the PilotApplication row was already committed. The send is now
+ * wrapped so a notification failure is logged but never blocks the
+ * caller.
+ */
+test('a failed internal notification does not prevent the application from being saved', function () {
+    config(['mail.default' => 'this-mailer-does-not-exist']);
+
+    $application = app(SubmitPilotApplicationAction::class)->execute(validPilotApplicationInput());
+
+    expect($application->exists)->toBeTrue();
+    expect(PilotApplication::query()->whereKey($application->id)->exists())->toBeTrue();
+});
