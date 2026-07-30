@@ -3715,3 +3715,30 @@ already bounded to 10MB by `StoreMeterUploadRequest` (Stage 15's own
 file-upload review, ADR-116). `config/queue.php` is stock Laravel
 defaults (90s `retry_after`), appropriate for these lightweight
 notification jobs. No code changes.
+
+### ADR-121: Migration rollback verification — actually run, not just read, against the real local dev database
+
+All 32 migrations declare a `down()` (grepped for a missing one first —
+none). Read-only verification would have stopped there; instead this
+was actually executed end-to-end against the local pgsql dev database
+(which had live seeded data, including the two test accounts a prior
+browser check in this same session had just logged into): `php artisan
+migrate:rollback` — rolled back all 32 migrations, batch 1, every one
+reporting `DONE`, no errors — then `php artisan migrate --seed` brought
+the schema and seed data straight back. Confirmed restored, not just
+"the command exited 0": queried both `owner@hetkin.test` and
+`admin@hetkin.test` back via tinker, and re-ran the full test suite
+(537/537 still green) against the freshly-rebuilt schema.
+
+Two migrations are worth a documented note rather than a fix: the two
+`change_*` migrations (`..._000240_change_invited_by_user_id_to_string_on_invitations_table`,
+`..._000270_change_metadata_to_json_on_audit_log_entries_table`) reverse
+a column *type* change (`string`→`ulid`, `jsonb`→`json`) — mechanically
+proven to work by the rollback just run, but this class of migration is
+inherently narrower than a pure add/drop: it would only fail on a real
+down-and-back-up cycle if data had been written in the newer, wider type
+that isn't representable in the older, narrower one (a non-ULID string
+in `invited_by_user_id`, non-JSON-serializable content in `metadata`).
+Not a defect to fix — a known, accepted characteristic of type-narrowing
+rollbacks in general, noted here so a future incident (a rollback that
+fails specifically on one of these two tables) isn't a surprise.
