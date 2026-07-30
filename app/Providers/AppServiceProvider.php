@@ -106,6 +106,19 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinutes(10, 5)->by($request->ip());
         });
 
+        // Stage 15 finding: InvitationController::store() checks the
+        // submitted password against an *existing* user's real password
+        // hash when the invited email already has an account (the
+        // signUp-then-signIn-fallback path — see that controller's
+        // docblock), which makes this unauthenticated endpoint a password
+        // oracle for that account. Unlike /sign-in (throttle:20,1 — see
+        // CustomerAuthenticationTest), this route had no throttle at all.
+        // Matches login's own limit rather than inventing a stricter one:
+        // same "guessing a secret" attacker goal, same per-IP key.
+        RateLimiter::for('invitation-accept', function (Request $request) {
+            return Limit::perMinute(20)->by($request->ip());
+        });
+
         // Explicit registration, not relying on Laravel's naming-convention
         // auto-discovery: these all live under App\Domain\*\Models, not
         // App\Models, which the default guesser doesn't check.

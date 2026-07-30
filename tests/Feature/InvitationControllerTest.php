@@ -102,3 +102,32 @@ test('accepting a nonexistent invitation 404s', function () {
 
     $response->assertNotFound();
 });
+
+test('accepting is rate limited after 20 attempts per minute', function () {
+    // Regression test for the Stage 15 finding: store()'s existing-account
+    // fallback checks the submitted password against a real user's hash
+    // (see the "falls back to signing in" test above), making this endpoint
+    // a password oracle if left unthrottled — same reasoning as
+    // CustomerAuthenticationTest's identical login-throttle test.
+    $existingUser = User::factory()->create([
+        'email' => 'person@example.test',
+        'password' => bcrypt('correct-Horse-Battery-Staple1!'),
+    ]);
+    $invitation = Invitation::factory()->create(['email' => 'person@example.test']);
+    $ip = ['REMOTE_ADDR' => '10.20.30.41'];
+
+    for ($i = 0; $i < 20; $i++) {
+        $this->withServerVariables($ip)->post(route('invite.accept', ['invitation' => $invitation->id]), [
+            'name' => 'Ignored',
+            'password' => 'wrong-guess',
+        ]);
+    }
+
+    $response = $this->withServerVariables($ip)->post(route('invite.accept', ['invitation' => $invitation->id]), [
+        'name' => 'Ignored',
+        'password' => 'correct-Horse-Battery-Staple1!',
+    ]);
+
+    $response->assertStatus(429);
+    $this->assertGuest('web');
+});

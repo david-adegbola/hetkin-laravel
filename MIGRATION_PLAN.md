@@ -3419,3 +3419,92 @@ Stage 15 is complete when:
 - performance targets have been achieved
 - security review has been completed
 - the platform is ready for public release
+
+### ADR-113: Dependency audit — clean on the PHP side; one high-severity npm advisory, confined to dev-only tooling, deliberately left unfixed
+
+`composer audit` reports no security vulnerability advisories. `npm audit`
+reports 6 high-severity findings, all the same root cause: a
+`brace-expansion` ReDoS/DoS advisory pulled in transitively by `eslint`'s
+own dependency tree (`@eslint/config-array`, `@eslint/eslintrc`,
+`eslint-plugin-react` all depend on vulnerable `minimatch` versions).
+`npm audit fix --force` would resolve it only by downgrading
+`eslint-plugin-react` to `7.22.0`, a breaking change losing newer lint
+rules. Not applied: `eslint` is a devDependency that runs at lint-time
+only — it's never bundled into `public/build`, never shipped to a
+browser, and never runs in production. A DoS against a linter process on
+a developer's own machine or in CI is not a production security issue.
+Documented here rather than silently ignored so a future audit doesn't
+re-discover the same finding without this reasoning attached.
+
+### ADR-114: Authorization review — Policies registered but exercised in only one of seven cases; confirmed not a live gap, since real tenant isolation comes from `CurrentOrganization` scoping, not policy checks
+
+Read all 7 registered Policies (`SessionPolicy`, `OrganizationPolicy`,
+`MemberPolicy`, `InvitationPolicy`, `SitePolicy`, `MeteringPointPolicy`,
+`SchedulePolicy`) and grepped every controller for `Gate::authorize()`/
+`->can()` call sites. 6 of the 7 are registered in
+`AppServiceProvider::boot()` but never actually invoked anywhere —
+scaffolding built ahead of customer-facing routes (member management,
+direct site/schedule editing) that v2 itself never shipped either (see
+`TeamController`'s own comment: "Inviting new members is a follow-up
+pass — v2's own comment"). This is technical debt, not a vulnerability:
+every controller that touches tenant data derives its query scope from
+`CurrentOrganization` (bound per-request from the authenticated user's
+membership, see `ResolveOrganizationContext` middleware) rather than
+from a client-supplied ID checked against a policy, so there's no
+request shape that lets one organization's member read or write
+another's data by omission of a `Gate::authorize()` call. Spot-verified
+this directly on the two places most likely to leak an ID-based lookup
+across tenants: `Admin\OrganizationController::resolveMember()` (bypasses
+`OrganizationScope` deliberately, then re-checks
+`->where('organization_id', $organization->id)` before `findOrFail` —
+correct), and `DecideRecommendationAction` (same pattern, with an
+explanatory comment on why the scope bypass is intentional there). No
+code changes; documented so the 6 unused Policies aren't mistaken later
+for either "dead code, delete it" or "already enforced."
+
+### ADR-115: Rate limiting review — one real gap found: the invite-accept endpoint doubled as an unthrottled password oracle against existing accounts
+
+Enumerated every unauthenticated, state-changing route
+(`php artisan route:list`, filtered to POST/PUT/PATCH/DELETE routes with
+no `Authenticate` middleware) and checked each against
+`App\Providers\AppServiceProvider`'s named limiters and inline
+`throttle:` middleware. `/sign-in` (20/min, both customer and admin
+variants at their own rates), `/forgot-password` /`/reset-password`
+(`password-reset-link`, 3/min), `/pilot-program/apply`
+(`pilot-application`, 5/10min), and `/confirm-password`
+(`throttle:6,1`, authenticated but re-verifies a password) were all
+already covered. `routes/pilots.php`'s `invite/{invitation}` GET (show)
+and POST (accept) had no throttle at all.
+
+The POST is more than a consistency gap: `InvitationController::store()`
+has a signUp-then-signIn-fallback (ported from v2's
+`AcceptInvitationForm.tsx` verbatim) — if the invited email already has
+an account, it checks the *submitted* password against that account's
+*real* password hash (`Hash::check($validated['password'],
+$user->password)`) and logs the visitor in on a match. That makes this
+route a password-guessing oracle for any account whose email an
+invitation was sent to, with no rate limit standing in its way — unlike
+the normal `/sign-in` form. The practical attacker surface is narrow
+today (only admins can create invitations — customers have no
+invite-sending UI, confirmed via `TeamController`'s own comment — so
+exploiting this requires an admin, compromised or malicious, inviting an
+existing customer's email into a shell org), but the fix is cheap and
+closes a real escalation path rather than just a theoretical one.
+`Invitation` IDs are ULIDs (`HasUlids`, confirmed on the model) so the
+GET route's own exposure — enumerating org name/email off a guessed ID —
+was already impractical; its new `throttle:60,1` is generous,
+anti-scanning insurance rather than the actual fix.
+
+Added a new `invitation-accept` limiter (20/min by IP, matching login's
+own rate — same "guessing a secret" attacker goal, same per-IP key) and
+applied it to `POST invite/{invitation}`. New regression test
+(`InvitationControllerTest.php`, "accepting is rate limited after 20
+attempts per minute") mirrors `CustomerAuthenticationTest`'s identical
+login-throttle test exactly. Also confirmed `PUT storage/{path}`
+(Laravel's own built-in local-disk temporary-upload route, unrelated to
+this app's code, `filesystems.php`'s `local.serve => true`) needs no
+throttle of its own: it requires a valid Laravel signed URL
+(`hasValidRelativeSignature()`), so an attacker without the app key
+cannot invoke it at all regardless of rate — an orthogonal, stronger
+control than throttling. Full suite green (534/534), Pint and PHPStan
+clean.

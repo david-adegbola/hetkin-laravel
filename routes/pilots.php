@@ -26,6 +26,17 @@ Route::prefix('pilot-program')->group(function () {
 });
 
 Route::prefix('invite')->group(function () {
-    Route::get('{invitation}', [InvitationController::class, 'show'])->name('invite.show');
-    Route::post('{invitation}', [InvitationController::class, 'store'])->name('invite.accept');
+    Route::get('{invitation}', [InvitationController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('invite.show');
+
+    // The `invitation-accept` limiter (App\Providers\AppServiceProvider) is
+    // the real fix here, not this GET's throttle above: store() checks the
+    // submitted password against an existing user's real password hash on
+    // its signIn-fallback path (InvitationController's docblock), making
+    // this the one unauthenticated write in the app that was a password
+    // oracle with no throttle at all until Stage 15's rate-limiting review.
+    Route::post('{invitation}', [InvitationController::class, 'store'])
+        ->middleware('throttle:invitation-accept')
+        ->name('invite.accept');
 });
