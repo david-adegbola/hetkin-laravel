@@ -3508,3 +3508,107 @@ throttle of its own: it requires a valid Laravel signed URL
 cannot invoke it at all regardless of rate — an orthogonal, stronger
 control than throttling. Full suite green (534/534), Pint and PHPStan
 clean.
+
+### ADR-116: File upload + mass-assignment review — clean, no changes
+
+File upload: the only upload endpoint in the app is
+`DataController::store()` (meter-reading CSV). `StoreMeterUploadRequest`
+caps it at 10MB and requires a valid uploaded file, deliberately not
+validating MIME/extension (matches v2 exactly — real Fingrid CSV exports
+report inconsistent content-types across browsers/OSes, so that check
+belongs to `FingridCsvParser`, not the Request). This is safe because the
+uploaded bytes are never written to disk or served back: `$file->get()`
+reads it straight into memory and hands it to
+`UploadMeterReadingsAction`, which parses it as CSV rows (dates, floats)
+and discards the original bytes — there's no path from an uploaded file
+to a web-accessible location, so "upload a `.php` file with a spoofed
+extension" (the classic unrestricted-upload risk) has no payoff here
+regardless of extension checking.
+
+Mass assignment: every Eloquent model in the app declares an explicit
+`#[Fillable([...])]` PHP attribute (Laravel's newer attribute-based
+alternative to a `protected $fillable` property) — confirmed by reading
+all 22 models directly, not just grepping for the old property syntax
+(which returned false positives on the first pass of this review).
+Eloquent's own default (`$guarded = ['*']` in
+`Concerns\GuardsAttributes`, confirmed in the vendor source) already
+fails closed with no declaration at all, so the explicit attribute on
+every model is redundant-but-correct defense, not a gap. Grepped the
+whole app for `$request->all()` and `->fill($request` — the two classic
+over-posting anti-patterns — zero matches; every controller passes
+`$request->validated()` (a Form Request's own explicit rule set) into
+`Model::create()`/Actions, never the raw request bag. No code changes.
+
+### ADR-117: Content-Security-Policy — implemented nonce-based, closing the gap `SecureHeaders`'s own docblock had left open since Stage 13
+
+`App\Http\Middleware\SecureHeaders` deliberately shipped in Stage 13
+without a CSP, with a docblock explaining exactly why: PostHog, Sentry,
+and Vite's dev-mode HMR client all load from third-party/dynamic
+origins, and a wrong CSP silently breaks one of them rather than failing
+loud — it needed its own pass with live browser verification against
+every integration, not a same-pass addition. This is that pass.
+
+Nonce-based, not `'unsafe-inline'`, for `script-src`: Laravel's own
+`Illuminate\Foundation\Vite` already has first-class CSP support
+(`Vite::useCspNonce()`/`Vite::cspNonce()`) that automatically stamps a
+`nonce` attribute onto every tag `@vite`/`@viteReactRefresh` emit —
+`SecureHeaders::handle()` now calls `Vite::useCspNonce()` *before*
+`$next($request)` runs, specifically so the same nonce is ready by the
+time the view renders. Two inline `<script>` tags in `app.blade.php`
+needed the identical nonce threaded through manually: the PWA bootstrap
+flag (`window.__PWA__`, straightforward — added the `nonce` attribute
+directly) and Ziggy's route table, which was not straightforward —
+Ziggy's own `@routes` Blade directive
+(`vendor/tightenco/ziggy/src/ZiggyServiceProvider.php`) only ever
+forwards a single `$group` argument to
+`BladeRouteGenerator::generate()`, silently dropping its own `$nonce`
+parameter, so `@routes` alone would have emitted an un-nonced script the
+new CSP then blocked. Replaced with a direct call to the same generator,
+passing `Vite::cspNonce()` through explicitly.
+
+That swap surfaced a real bug on the very first live check (not a
+CSP-specific one): `Tightenco\Ziggy\BladeRouteGenerator` doesn't exist —
+the composer package `tightenco/ziggy` ships under the PHP namespace
+`Tighten\Ziggy` (no "co"), confirmed by reading
+`vendor/tightenco/ziggy/src/BladeRouteGenerator.php` directly. Caught
+immediately because "live browser verification against every
+integration" was taken literally: `npm run build` +
+`php artisan serve`, then every surface (marketing, portal, admin) was
+actually loaded, not just assumed to work from reading the diff — the
+wrong namespace 500'd every single page until fixed.
+
+Policy (`App\Http\Middleware\SecureHeaders::buildPolicy()`):
+`default-src 'self'`; `script-src 'self' 'nonce-{per-request}'` (plus
+`localhost:5173`/`127.0.0.1:5173` over http/ws, local environment only,
+for Vite's dev server — `app()->environment('local')`, the same signal
+Vite's own `isRunningHot()` reasoning is built on, not a guess);
+`style-src 'self' 'unsafe-inline'` (React/Tailwind/chart-library inline
+`style=""` attributes throughout make nonce-ing every one impractical,
+and style-only injection is a materially smaller risk class than script
+injection — the one directive that stays permissive, deliberately);
+`img-src 'self' data:`; `font-src 'self'` (fonts are self-hosted, no
+external origin needed); `connect-src` adds Sentry's DSN host and
+`config('services.posthog.host')`, both parsed from the same config
+Sentry/PostHog's own client `init()` reads at build time, so the
+allow-list can never drift from what the bundle actually requests;
+`frame-ancestors 'self'`, `base-uri 'self'`, `form-action 'self'`,
+`object-src 'none'`.
+
+Verified live in the browser (`npm run build`, `php artisan serve`, the
+Browser pane, stale `public/hot` removed first so built assets — not a
+leftover dev-mode HMR reference — were actually being served): marketing
+homepage, customer sign-in → Dashboard, and admin sign-in → Pilot
+Applications all loaded with zero console errors and zero CSP violation
+messages; `window.route` (Ziggy) resolved correctly on every page;
+`navigator.serviceWorker.getRegistrations()` on the portal Dashboard
+showed `sw-portal.js` actually active at scope `/dashboard/`, confirming
+the CSP doesn't block Service Worker registration either. New tests
+(`tests/Feature/SecureHeadersTest.php`): the header is present and
+well-formed on every response, the nonce is genuinely random per-request
+(two consecutive requests get two different nonces — a fixed nonce would
+defeat the entire mechanism), and the nonce in the response header
+matches the nonce actually printed on the page's inline scripts, checked
+on both the portal and admin surfaces. Full suite green (537/537), Pint,
+PHPStan (`--memory-limit=512M` — the default 128M crashed mid-run on
+this machine, an environmental limit unrelated to this change, not a
+code issue), `tsc --noEmit`, and `npm run build` all clean.

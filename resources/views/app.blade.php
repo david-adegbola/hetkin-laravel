@@ -40,7 +40,7 @@
         @if($pwaAuthenticated)
             <link rel="manifest" href="/manifest-{{ $pwaSurface }}.webmanifest">
             <meta name="theme-color" content="#0f172a">
-            <script>
+            <script {{ Illuminate\Support\Facades\Vite::cspNonce() ? 'nonce="'.Illuminate\Support\Facades\Vite::cspNonce().'"' : '' }}>
                 // Read by resources/js/app.tsx, which calls
                 // registerServiceWorker() (resources/js/lib/pwa.ts) once its
                 // own module code runs. Deliberately just deposits data here
@@ -55,7 +55,21 @@
             </script>
         @endif
 
-        @routes
+        {{--
+            Not the plain @routes directive: Ziggy's Blade::directive
+            registration (vendor/tightenco/ziggy/src/ZiggyServiceProvider.php)
+            only ever forwards a single `$group` argument to
+            BladeRouteGenerator::generate(), silently dropping its own
+            `$nonce` parameter — so @routes alone would emit this
+            <script> tag with no nonce, and App\Http\Middleware\
+            SecureHeaders's nonce-based script-src would block it outright.
+            Calling the same generator directly, passing the identical
+            nonce Vite::useCspNonce() already generated for this request.
+            Note the composer package is `tightenco/ziggy` but its PHP
+            namespace is `Tighten\Ziggy` (no "co") — confirmed by reading
+            vendor/tightenco/ziggy/src/BladeRouteGenerator.php directly.
+        --}}
+        {!! app(Tighten\Ziggy\BladeRouteGenerator::class)->generate(nonce: Illuminate\Support\Facades\Vite::cspNonce()) !!}
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
