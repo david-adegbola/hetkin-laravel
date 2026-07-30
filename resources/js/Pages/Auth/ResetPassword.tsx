@@ -42,7 +42,7 @@ export default function ResetPassword({
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Set a new password</CardTitle>
+                    <CardTitle as="h1">Set a new password</CardTitle>
                 </CardHeader>
                 <CardDescription className="mb-5">
                     Choose a new password for {email}.

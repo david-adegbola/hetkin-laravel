@@ -35,7 +35,7 @@ export default function ConfirmPassword() {
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Confirm your password</CardTitle>
+                    <CardTitle as="h1">Confirm your password</CardTitle>
                 </CardHeader>
                 <CardDescription className="mb-5">
                     For your security, please confirm your password to continue.

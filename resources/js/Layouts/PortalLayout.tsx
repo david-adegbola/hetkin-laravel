@@ -169,6 +169,19 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
     return (
         <div className="bg-background min-h-screen md:grid md:grid-cols-[232px_1fr]">
+            {/*
+                Stage 15 accessibility pass — same reasoning as
+                AdminLayout's own skip link: this sidebar's nav items
+                forced every keyboard/screen-reader user through the full
+                list before reaching page content on every navigation
+                (WCAG 2.4.1, Bypass Blocks).
+            */}
+            <a
+                href="#portal-main-content"
+                className="focus:bg-accent focus:rounded-control sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:text-white"
+            >
+                Skip to main content
+            </a>
             <input
                 type="checkbox"
                 id="portal-nav-toggle"
@@ -244,7 +257,10 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="flex flex-col">
-                <main className="flex-1 px-4 py-6 pb-12 md:px-8">
+                <main
+                    id="portal-main-content"
+                    className="flex-1 px-4 py-6 pb-12 md:px-8"
+                >
                     {children}
                 </main>
                 <PwaUpdateBanner />

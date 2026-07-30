@@ -44,6 +44,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     return (
         <div className="bg-background min-h-screen">
+            {/*
+                Stage 15 accessibility pass: the ten-item nav below (plus
+                install/account controls) meant every single page load
+                forced a keyboard/screen-reader user to tab through all of
+                it before reaching page content — WCAG 2.4.1 (Bypass
+                Blocks). `sr-only focus:not-sr-only` is the standard
+                pattern: invisible until it's the focused element, then a
+                normal visible, tabbable link.
+            */}
+            <a
+                href="#admin-main-content"
+                className="focus:bg-accent focus:rounded-control sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:text-white"
+            >
+                Skip to main content
+            </a>
             <nav className="border-border bg-background flex flex-wrap items-center gap-4 border-b px-8 py-3">
                 <Link href={`${base}/overview`} className="flex items-center">
                     <Logo />
@@ -89,7 +104,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     </div>
                 )}
             </nav>
-            <div className="p-8">{children}</div>
+            <main id="admin-main-content" className="p-8">
+                {children}
+            </main>
             <PwaUpdateBanner />
         </div>
     );

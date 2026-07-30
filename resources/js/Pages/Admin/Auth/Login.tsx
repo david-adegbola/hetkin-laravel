@@ -33,7 +33,7 @@ export default function AdminLogin() {
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Admin sign-in</CardTitle>
+                    <CardTitle as="h1">Admin sign-in</CardTitle>
                 </CardHeader>
                 <CardDescription className="mb-5">
                     Internal Hetkin staff only.

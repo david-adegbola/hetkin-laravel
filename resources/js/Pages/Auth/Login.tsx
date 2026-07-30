@@ -40,7 +40,7 @@ export default function Login({ status }: { status?: string }) {
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Sign in to Hetkin</CardTitle>
+                    <CardTitle as="h1">Sign in to Hetkin</CardTitle>
                 </CardHeader>
                 <CardDescription className="mb-5">
                     For customers on an active or approved pilot.

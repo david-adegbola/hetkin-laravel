@@ -33,7 +33,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
             <Logo />
             <Card className="w-full max-w-sm">
                 <CardHeader>
-                    <CardTitle>Reset your password</CardTitle>
+                    <CardTitle as="h1">Reset your password</CardTitle>
                 </CardHeader>
                 <CardDescription className="mb-5">
                     Enter your email and we&apos;ll send you a link to reset

@@ -37,12 +37,24 @@ export function CardHeader({
     );
 }
 
+/**
+ * `as` defaults to `h3` — correct for every card nested inside a page that
+ * already has its own `<h1>` (PortalPageHeader/AdminPageHeader, or a
+ * page-specific `<h1>`), which is most of them. A handful of standalone
+ * pages with no shared app shell (Auth/Login, Auth/ForgotPassword,
+ * Auth/ResetPassword, Auth/ConfirmPassword, Admin/Auth/Login,
+ * Invite/Accept) use this Card's title as the page's *only* heading —
+ * those pass `as="h1"` explicitly so the page has a real `<h1>` instead of
+ * skipping straight to `h3` (a real WCAG 1.3.1/2.4.6 gap, not a style
+ * nitpick: it breaks heading-level navigation for screen reader users).
+ */
 export function CardTitle({
+    as: Component = 'h3',
     className,
     ...props
-}: React.HTMLAttributes<HTMLHeadingElement>) {
+}: React.HTMLAttributes<HTMLHeadingElement> & { as?: 'h1' | 'h2' | 'h3' }) {
     return (
-        <h3
+        <Component
             className={cn(
                 'font-display text-primary text-base font-semibold',
                 className,

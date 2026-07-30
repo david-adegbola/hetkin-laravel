@@ -47,14 +47,16 @@ export default function Accept({
                 {invalidReason || !invitation ? (
                     <>
                         <CardHeader>
-                            <CardTitle>Invitation unavailable</CardTitle>
+                            <CardTitle as="h1">
+                                Invitation unavailable
+                            </CardTitle>
                         </CardHeader>
                         <CardDescription>{invalidReason}</CardDescription>
                     </>
                 ) : (
                     <>
                         <CardHeader>
-                            <CardTitle>
+                            <CardTitle as="h1">
                                 Join {invitation.organization_name} on Hetkin
                             </CardTitle>
                         </CardHeader>

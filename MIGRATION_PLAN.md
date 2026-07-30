@@ -3840,3 +3840,59 @@ strip either one. The only content added during this stage's own work
 was the Health check section (ADR-122) — everything that predated
 Stage 15 held up without correction. No changes beyond what ADR-122
 already made.
+
+### ADR-125: Accessibility live review — two real, bounded fixes found by actually tabbing through the app, not just reading source
+
+Live-checked landmark structure, form labeling, focus visibility, and
+heading hierarchy in the browser across marketing, portal, and admin
+(both signed out and signed in) rather than a source-only pass. Most of
+it was already clean: one `<h1>` per marketing page, every form input
+has a real associated `<label>`, no unlabeled buttons/images/links
+anywhere, and focus rings are visible (a `box-shadow` ring pattern,
+confirmed via `getComputedStyle` on the actual focused element after a
+real `Tab` keypress, not assumed from CSS source).
+
+Two real, bounded findings, both fixed:
+
+1. **Six standalone pages had no `<h1>` at all**, skipping straight to
+   `<h3>` — a genuine WCAG 1.3.1/2.4.6 defect, not a style nitpick: it
+   breaks heading-level navigation for screen reader users. Root cause:
+   `Components/ui/Card.tsx`'s `CardTitle` hardcodes `<h3>`, correct for
+   the many pages where it's a sub-section heading nested under a real
+   page `<h1>` (`PortalPageHeader`, or a page's own `<h1>` — verified
+   directly on `Admin/Overview.tsx`, `Admin/Team.tsx`, `Admin/Jobs.tsx`,
+   `Admin/Invoices.tsx`, `Admin/Organizations/Show.tsx`,
+   `Settings/Security.tsx`, all confirmed to already have one), but wrong
+   on the small set of pages rendered standalone with no shared app
+   shell, where `CardTitle` is the page's *only* heading:
+   `Auth/{Login,ForgotPassword,ResetPassword,ConfirmPassword}.tsx`,
+   `Admin/Auth/Login.tsx`, `Invite/Accept.tsx` (two branches). Fixed by
+   giving `CardTitle` an optional `as` prop (default `h3`, unchanged for
+   every existing call site) and passing `as="h1"` on exactly those six
+   pages' seven `CardTitle` usages — confirmed live afterward
+   (`document.querySelectorAll('h1,h2,h3')` on both `/sign-in` and
+   `/admin/sign-in`) that each now renders exactly one real `<h1>`.
+
+2. **No skip-to-content link anywhere**, so every keyboard/screen-reader
+   user had to tab through the full nav (up to ten items on
+   `AdminLayout`) before reaching page content on every single
+   navigation — WCAG 2.4.1 (Bypass Blocks). Added a standard
+   `sr-only focus:not-sr-only` skip link (invisible until it's the
+   focused element, then a normal visible, tabbable link) as the very
+   first element in both `PortalLayout.tsx` and `AdminLayout.tsx`,
+   targeting a new `id` on each layout's `<main>`
+   (`AdminLayout` had no `<main>` landmark at all — its content div
+   became one as part of this fix). Verified live: on both `/dashboard`
+   and the admin console, pressing Tab once from a fresh page load
+   focuses the skip link first (confirmed via `document.activeElement`
+   after a real keypress, plus a screenshot showing the visible focus
+   ring), and its `href` resolves to the correct target ID.
+
+Deliberately **not** in scope: marketing pages' own `<main>`-per-page
+pattern (15 files, each with a short nav) doesn't get a skip link in
+this pass — the nav is short enough that the practical impact is much
+smaller than the ten-item admin sidebar, and mechanically touching 15
+files for a comparatively small win wasn't the best use of the time
+available; documented here as a known, deliberately deferred gap rather
+than silently dropped. Full suite green (539/539), Pint/PHPStan clean
+(no PHP touched), `tsc --noEmit` and `eslint` clean.
