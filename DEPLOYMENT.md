@@ -171,18 +171,27 @@ registrar).
 ### Email — Resend (strongly recommended; app works without it, but every email silently just logs instead of sending)
 
 1. Sign up at [resend.com](https://resend.com), go to **Domains → Add
-   Domain**, enter `hetkin.app`.
-2. Add the DNS records Resend shows you (SPF + DKIM, both TXT/CNAME) at
-   your domain registrar, then click **Verify** in Resend's dashboard.
-   Until verified, Resend silently refuses to deliver to anyone except
-   your own account's address — this is the exact gap `.env.example`'s
-   own comment on `MAIL_FROM_ADDRESS` already warns about.
+   Domain**, enter `mail.hetkin.app` — a subdomain, not the bare apex.
+   This is Resend's own recommendation: sending reputation is isolated to
+   that subdomain, so a transactional-mail deliverability issue never
+   affects the root domain everything else (the marketing site, the
+   `dashboard.`/`admin.` subdomains) lives on.
+2. Add the DNS records Resend shows you (SPF + DKIM, both TXT/CNAME,
+   scoped under `mail.hetkin.app`) at your domain registrar, then click
+   **Verify** in Resend's dashboard. Until verified, Resend silently
+   refuses to deliver to anyone except your own account's address — this
+   is the exact gap `.env.example`'s own comment on `MAIL_FROM_ADDRESS`
+   already warns about.
 3. **API Keys → Create API Key**, "Sending access" scope is enough →
    set as `RESEND_API_KEY`.
 4. Set `MAIL_MAILER=resend` (it's `log` by default, which is correct
    for local dev but must change here).
-5. `CONTACT_EMAIL` — a real inbox you control (e.g. `hello@hetkin.app`);
-   this is where new pilot-application alerts get sent.
+5. `MAIL_FROM_ADDRESS` — an address on the verified subdomain, e.g.
+   `notifications@mail.hetkin.app` (`.env.example`'s own default).
+6. `CONTACT_EMAIL` — a real inbox you control (e.g. `hello@hetkin.app`,
+   the ordinary root domain — this is a destination you read, not a
+   sending identity); this is where new pilot-application alerts get
+   sent.
 
 ### Day-ahead electricity prices — ENTSO-E (required for the pricing/optimization features to have real data; the app runs without it, but price ingestion fails closed with a clear error)
 

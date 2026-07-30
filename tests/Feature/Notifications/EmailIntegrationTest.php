@@ -21,7 +21,7 @@ test('PilotApplicationSubmitted uses the app-wide MAIL_FROM_ADDRESS like every o
 });
 
 test('every other outbound notification uses the app-wide MAIL_FROM_ADDRESS, not a per-notification override', function () {
-    config(['mail.from.address' => 'notifications@hetkin.app', 'mail.from.name' => 'Hetkin']);
+    config(['mail.from.address' => 'notifications@mail.hetkin.app', 'mail.from.name' => 'Hetkin']);
 
     $invitation = Invitation::factory()->create();
     $mailMessage = (new InvitationResent($invitation, 'Acme Oy'))->toMail((object) []);
