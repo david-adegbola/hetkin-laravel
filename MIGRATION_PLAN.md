@@ -3785,3 +3785,37 @@ Cloud checks `/up` automatically; Forge needs the health-check path set
 under Application; anything else needs an external monitor pointed at
 it manually) — plus a first-deploy checklist item to actually confirm
 it reports healthy post-deploy, not just that it's configured.
+
+### ADR-123: Observability review — Sentry/PostHog/logging completeness, clean
+
+Checked three things left open after Stage 11's initial integration
+work: whether failed *queue* jobs (not just HTTP request exceptions)
+reach Sentry, whether PostHog's server-side event coverage (9 call sites
+per Stage 11) was still intact, and whether logging defaults were
+production-appropriate.
+
+Queue failures: `Integration::handles($exceptions)`
+(`bootstrap/app.php`) only wires Laravel's HTTP/console exception
+handler — a failed queued notification (e.g. Resend down mid-send)
+doesn't go through that path at all. Checked whether this needed its own
+`Queue::failing()` listener; it doesn't —
+`vendor/sentry/sentry-laravel/src/Sentry/Laravel/Features/QueueIntegration.php`
+already listens for `Illuminate\Queue\Events\JobExceptionOccurred` and
+reports it, auto-registered by the package itself with nothing in this
+app's `config/sentry.php` disabling it. A capability that was already
+present, not one this review added.
+
+PostHog: `grep`'d for `PostHogService` usage — all 9 server-side call
+sites from Stage 11 (`AcceptInvitationAction`, `DecideRecommendationAction`,
+`ApplyDecisionsToNewScheduleVersionAction`, `SubmitPilotApplicationAction`,
+`ApprovePilotApplicationAction`, `UploadMeterReadingsAction`,
+`GenerateSavingsAssessmentAction`, `IssueInvoiceAction`,
+`RunVerificationAction`) are still intact.
+
+Logging: `LOG_LEVEL=warning` for production was already documented in
+DEPLOYMENT.md's environment variable table from an earlier stage (the
+`.env.example` local-dev default of `debug` is correctly called out as
+"too noisy for production"), so nothing new to add there. Grepped every
+`Log::`/`logger()` call site in the app for password/token/secret/API-key
+adjacent logging — none found; no risk of credentials leaking into log
+output. No code changes.
