@@ -224,3 +224,9 @@ For *why* something is built the way it is, check
 [MIGRATION_PLAN.md](MIGRATION_PLAN.md) — every non-obvious decision has
 a numbered ADR explaining the reasoning and, where relevant, the v2
 behavior it's matching.
+
+## License
+
+Proprietary — © Hetkin Oy. Not open source; see [LICENSE](LICENSE). No
+rights are granted to use, copy, modify, or distribute this code without
+Hetkin Oy's prior written consent.

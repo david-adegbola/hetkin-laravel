@@ -1,0 +1,32 @@
+Copyright (c) 2026 Hetkin Oy, Vaasa, Finland. All rights reserved.
+
+This software and its associated source code, documentation, and other
+files in this repository (the "Software") are the proprietary and
+confidential property of Hetkin Oy. The Software is NOT open source and
+is NOT licensed under any open-source or third-party license.
+
+No permission is granted to any person to use, copy, modify, merge,
+publish, distribute, sublicense, sell, or otherwise deal in the
+Software, in whole or in part, for any purpose, without the prior
+written consent of Hetkin Oy.
+
+Unauthorized copying, reproduction, distribution, reverse engineering,
+or use of this Software, via any medium, is strictly prohibited.
+
+Access to this repository does not, by itself, grant any license or
+rights to the Software beyond what is explicitly and separately agreed
+to in writing by Hetkin Oy.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL HETKIN OY BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+All third-party open-source packages used by this Software (see
+composer.json and package.json) remain governed by their own respective
+licenses; this notice does not alter or supersede those licenses. It
+applies only to the original source code, configuration, and content
+authored by or for Hetkin Oy in this repository.
