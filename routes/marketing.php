@@ -12,22 +12,28 @@ use Inertia\Inertia;
  * registration in routes/admin-protected.php.
  *
  * Main-domain only, same as routes/pilots.php's public surfaces — v2 never
- * proxies the marketing site to dashboard.* or admin.*.
+ * proxies the marketing site to dashboard.* or admin.*. Enforced with an
+ * explicit domain() constraint (rather than relying on domains.php simply
+ * being required first and matching sooner) so a request to admin.{domain}
+ * or dashboard.{domain} can never render marketing content, regardless of
+ * route registration order elsewhere.
  */
-Route::get('/', fn () => Inertia::render('Marketing/Home'))->name('home');
-Route::get('how-it-works', fn () => Inertia::render('Marketing/HowItWorks'))->name('how-it-works');
-Route::get('pricing', fn () => Inertia::render('Marketing/Pricing'))->name('pricing');
-Route::get('trust', fn () => Inertia::render('Marketing/Trust'))->name('trust');
-Route::get('faq', fn () => Inertia::render('Marketing/Faq'))->name('faq');
-Route::get('methodology', fn () => Inertia::render('Marketing/Methodology'))->name('methodology');
+Route::domain(config('app.domain'))->group(function () {
+    Route::get('/', fn () => Inertia::render('Marketing/Home'))->name('home');
+    Route::get('how-it-works', fn () => Inertia::render('Marketing/HowItWorks'))->name('how-it-works');
+    Route::get('pricing', fn () => Inertia::render('Marketing/Pricing'))->name('pricing');
+    Route::get('trust', fn () => Inertia::render('Marketing/Trust'))->name('trust');
+    Route::get('faq', fn () => Inertia::render('Marketing/Faq'))->name('faq');
+    Route::get('methodology', fn () => Inertia::render('Marketing/Methodology'))->name('methodology');
 
-// Unlisted (not linked from SiteHeader/SiteFooter nav, noindex) — see each
-// page's own docblock.
-Route::get('beta', fn () => Inertia::render('Marketing/Beta'))->name('beta');
-Route::get('docs', fn () => Inertia::render('Marketing/Docs'))->name('docs');
+    // Unlisted (not linked from SiteHeader/SiteFooter nav, noindex) — see
+    // each page's own docblock.
+    Route::get('beta', fn () => Inertia::render('Marketing/Beta'))->name('beta');
+    Route::get('docs', fn () => Inertia::render('Marketing/Docs'))->name('docs');
 
-Route::prefix('legal')->name('legal.')->group(function () {
-    Route::get('privacy', fn () => Inertia::render('Marketing/Legal/Privacy'))->name('privacy');
-    Route::get('terms', fn () => Inertia::render('Marketing/Legal/Terms'))->name('terms');
-    Route::get('cookies', fn () => Inertia::render('Marketing/Legal/Cookies'))->name('cookies');
+    Route::prefix('legal')->name('legal.')->group(function () {
+        Route::get('privacy', fn () => Inertia::render('Marketing/Legal/Privacy'))->name('privacy');
+        Route::get('terms', fn () => Inertia::render('Marketing/Legal/Terms'))->name('terms');
+        Route::get('cookies', fn () => Inertia::render('Marketing/Legal/Cookies'))->name('cookies');
+    });
 });

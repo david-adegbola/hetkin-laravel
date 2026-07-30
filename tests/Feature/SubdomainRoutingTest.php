@@ -1,7 +1,11 @@
 <?php
 
+use App\Domain\Organizations\Models\Invitation;
+use App\Domain\Organizations\Scopes\OrganizationScope;
+use App\Domain\Pilots\Models\PilotApplication;
 use App\Models\AdminUser;
 use App\Models\User;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * Stage 2 — dashboard.* / admin.* subdomain route groups
@@ -118,4 +122,61 @@ test('the shared subdomain prop does not flag the main domain', function () {
         ->assertInertia(fn ($page) => $page
             ->where('subdomain.isDashboardHost', false)
             ->where('subdomain.isAdminHost', false));
+});
+
+/*
+ * Regression coverage for a real bug: routes/web.php's `/dashboard` prefix
+ * and routes/admin.php's `/admin` prefix originally carried no domain()
+ * constraint at all, so they matched ANY host — including the wrong one.
+ * A browser with a valid customer session visiting admin.{domain} rendered
+ * the customer portal there (wrong page, and — since SESSION_DOMAIN has a
+ * leading dot — the real customer session cookie was honored on that host
+ * too). Each prefix is now domain()-constrained to the bare app domain;
+ * dashboard.{domain}/admin.{domain} are served exclusively by their own
+ * bare-path registrations in routes/domains.php.
+ */
+test('the main-domain dashboard prefix does not match the admin subdomain', function () {
+    ['user' => $user] = portalUser();
+
+    $this->actingAs($user, 'web')
+        ->get('http://admin.localhost/dashboard')
+        ->assertNotFound();
+});
+
+test('the main-domain admin prefix does not match the dashboard subdomain', function () {
+    $admin = AdminUser::factory()->create();
+
+    $this->actingAs($admin, 'admin')
+        ->get('http://dashboard.localhost/admin/pilots')
+        ->assertNotFound();
+});
+
+/*
+ * Regression coverage for the second half of the same bug report: because
+ * routes/pilots.php's `invite` group also carried no domain() constraint,
+ * `route('invite.show', ...)` — called while handling an admin-console
+ * request — fell back to the CURRENT request's host to build the absolute
+ * URL, producing invite links on admin.{domain} instead of the bare
+ * domain. Approving a pilot application from the admin subdomain must
+ * still produce a bare-domain invite link.
+ */
+test('an invite link generated from the admin subdomain still points at the bare domain', function () {
+    Notification::fake();
+    $admin = AdminUser::factory()->create();
+    $application = PilotApplication::factory()->create();
+
+    $this->actingAs($admin, 'admin')
+        ->post('http://admin.localhost/pilots/'.$application->id.'/approve')
+        ->assertRedirect();
+
+    $invitation = Invitation::withoutGlobalScope(OrganizationScope::class)->first();
+
+    $response = $this->actingAs($admin, 'admin')->get('http://admin.localhost/pilots');
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('decided.0.invite_url', route('invite.show', ['invitation' => $invitation->id])));
+
+    expect($invitation)->not->toBeNull();
+    expect(parse_url(route('invite.show', ['invitation' => $invitation->id]), PHP_URL_HOST))
+        ->not->toContain('admin.');
 });

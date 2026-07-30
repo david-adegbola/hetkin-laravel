@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            UseSessionRealm::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             SecureHeaders::class,
@@ -41,12 +42,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // Illuminate\Session\Middleware\StartSession resolves the session
         // store — StartSession is one of Laravel's "prioritized" framework
         // middleware, so simply listing UseSessionRealm first in a route's
-        // middleware array is NOT enough: Illuminate\Routing\SortedMiddleware
-        // repositions prioritized middleware according to the priority list
-        // below, regardless of the declared array order, for any middleware
-        // not itself in that list. This explicit priority entry is the
-        // documented way to guarantee the ordering MIGRATION_PLAN.md ADR-4
-        // depends on.
+        // middleware array (or in the 'web' group above) is NOT enough:
+        // Illuminate\Routing\SortedMiddleware repositions prioritized
+        // middleware according to the priority list below, regardless of the
+        // declared array order, for any middleware not itself in that list.
+        // This explicit priority entry is the documented way to guarantee
+        // the ordering MIGRATION_PLAN.md ADR-4 depends on — including for
+        // the unparameterized, host-auto-detecting instance now appended to
+        // the global 'web' group above.
         $middleware->prependToPriorityList(
             before: StartSession::class,
             prepend: UseSessionRealm::class,
