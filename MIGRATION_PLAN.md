@@ -3929,3 +3929,59 @@ relative to the CSS state change, not a rendering defect in the app —
 worth being explicit about since it looked exactly like a real bug on
 first glance, and the fix would have been non-existent had one been
 attempted. No code changes.
+
+### ADR-128: End-to-end critical workflow validation — the full public-application-to-first-upload golden path, run for real, not simulated
+
+Rather than testing isolated flows, chained together the single longest
+real user journey in the app — public pilot application → admin review
+→ invitation → account creation → first login → meter data upload —
+through actual HTTP requests in a live browser, using a genuinely new
+organization created live during this pass, not fixture data:
+
+1. Submitted `/pilot-program/apply` with real form data (Metal / heat
+   treatment, €500,000 est. spend) — landed on the "Application
+   received" success state, confirmed via the Inertia page's own
+   `status`/`heading` role rather than assuming from a redirect.
+2. Signed into `/admin/pilots` as the seeded admin (still the *same*
+   admin session from earlier in this pass — see point 5 below) and
+   clicked **Approve** — pending count dropped 1→0 live.
+3. Pulled the resulting `Invitation` id straight from the database
+   (`tinker`, `Invitation::withoutGlobalScope(...)`) standing in for
+   the email Resend would otherwise have sent (`MAIL_MAILER=log`
+   locally) — same approach the account-security test suite already
+   uses for password-reset links.
+4. Visited `/invite/{id}`, which rendered `CardTitle as="h1"`'s exact
+   fix from this same session's accessibility pass ("Join E2E Test
+   Manufacturing Oy on Hetkin") — a live confirmation that fix works
+   end-to-end, not just in isolation. Submitted the account-creation
+   form; landed on `/dashboard`, re-confirming ADR-112's "always
+   Dashboard, never a stashed intended URL" fix live as well, since
+   this was this account's very first authenticated request.
+5. Separately, `/admin/organizations` (visited in the *same* browser,
+   different guard) still showed "Dev Admin" signed in and the new
+   organization with 1 member — real confirmation that customer/admin
+   session isolation (ADR-4/ADR-12) holds under simultaneous real
+   dual-realm use, not just in a test double.
+6. The one step the Browser pane genuinely cannot drive is a native
+   `<input type="file">` — CDP-level file injection isn't exposed by
+   this tool, and directly setting `.value` on a file input throws
+   `InvalidStateError` by browser design (confirmed by trying). Rather
+   than skip verifying the upload pipeline, exercised the real
+   `UploadMeterReadingsAction` via `tinker` against this same live
+   organization and user with a real 48-row CSV — `rowsWritten: 48`,
+   one real `MeteringPoint` and `Site` auto-provisioned, 48 real
+   `MeterReading` rows — then reloaded `/dashboard` in the browser and
+   confirmed the onboarding checklist updated live, "0 of 4" → "1 of 4
+   done", with "Upload your electricity consumption data" struck
+   through. The HTTP boundary this skipped (the controller's
+   `$request->file('file')` handling) is separately covered by
+   `tests/Feature/Portal/DataControllerTest.php`, already green in the
+   full suite — so the only genuinely untested seam was the browser's
+   own file picker, not application code.
+
+All test data created during this pass (`E2E Test Manufacturing Oy`,
+its site/metering point/meter readings/member/invitation, and the
+`e2e-test@example.test` user) was deleted afterward via `tinker`,
+verified back down to exactly the two original seeded accounts
+(`owner@hetkin.test`, `admin@hetkin.test`) — the dev database is
+handed back clean, not left with throwaway test clutter.
