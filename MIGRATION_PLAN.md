@@ -3896,3 +3896,36 @@ files for a comparatively small win wasn't the best use of the time
 available; documented here as a known, deliberately deferred gap rather
 than silently dropped. Full suite green (539/539), Pint/PHPStan clean
 (no PHP touched), `tsc --noEmit` and `eslint` clean.
+
+### ADR-126: Responsive breakpoint testing — clean at mobile/tablet/desktop, no changes
+
+Live-checked mobile (375×812), tablet (768×1024), and desktop across
+marketing, portal (signed in), and admin (signed in): `PortalLayout`'s
+sidebar correctly collapses to a hamburger-toggled drawer below `md`
+and expands to the persistent sidebar at `md`/768px (the exact tablet
+boundary — checked precisely there, not just comfortably above or
+below it); `AdminLayout`'s ten-item nav wraps into multiple rows at
+mobile width rather than overflowing or clipping; no page checked
+(`/dashboard`, `/admin/overview`, `/admin/organizations`,
+`/admin/invoices`, `/dashboard/reports`) produced horizontal overflow
+at 375px (`document.body.scrollWidth > window.innerWidth`, checked
+programmatically, not eyeballed). Notably, zero pages in the app use a
+raw `<table>` element (`document.querySelectorAll('table').length`
+returned 0 everywhere checked) — tabular data renders as cards/flex
+layouts throughout, which sidesteps the single most common
+responsive-breakage pattern (a wide table forcing page-level horizontal
+scroll) entirely, by construction rather than by a specific responsive
+fix.
+
+One false alarm worth recording so it isn't rediscovered: immediately
+after toggling `PortalLayout`'s mobile nav (a CSS-only
+`peer-checked:flex` state change, no JS), a screenshot showed only the
+first nav item — but the DOM, computed styles, accessibility tree, and
+`elementFromPoint` all independently confirmed every nav link was
+correctly rendered and positioned. A forced repaint (scrolling 1px and
+back) made the screenshot show all eight items correctly. This was a
+stale-compositor-frame artifact in the screenshot tool's capture timing
+relative to the CSS state change, not a rendering defect in the app —
+worth being explicit about since it looked exactly like a real bug on
+first glance, and the fix would have been non-existent had one been
+attempted. No code changes.
