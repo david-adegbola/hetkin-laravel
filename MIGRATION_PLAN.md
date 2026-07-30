@@ -3661,3 +3661,57 @@ post-change (ErrorBoundary wraps the entire app, so its edit was the
 highest-risk part of this change to get wrong). Full suite green
 (537/537), `tsc --noEmit` and `eslint` clean, no PHP changes so no
 PHPStan re-run needed.
+
+### ADR-119: Final N+1/index sweep — clean, nothing beyond Stage 13's own audit
+
+Stage 13 (ADR range covering task #126) already did a comprehensive
+N+1/eager-loading/indexing pass. The only code added since then is
+Stage 14's PWA work (`PwaController`, manifest/SW routes, Blade/JS/SW
+source) plus this stage's own middleware/route changes — none of which
+touch Eloquent at all (confirmed: zero `Model`/`::query`/`::where`/`DB::`
+matches in `PwaController.php`). So this was a final sanity sweep more
+than a delta review: re-checked `Admin\OrganizationController::show()`
+(the "360 view, 12 sections" page — the single highest N+1-risk view in
+the app, by relation count) and `Portal\DashboardController::show()`
+line-by-line for eager loading, then grepped every `->map(fn` closure
+across `app/Http/Controllers` and `app/Domain` (19 files) for relation
+access without a matching `->with()` on the producing query, and
+spot-checked the four busiest query paths (`Invitation` lookup,
+`Member::isMemberOf()`, `AuditLogEntry`, `JobRun`) against their
+migrations' `index()`/`unique()` declarations. Zero `Model::all()` calls
+exist anywhere in the app (a common N+1 precursor). Every relation
+access found inside a loop/map closure had eager loading already in
+place; every hot WHERE-clause column checked was already indexed. No
+code changes — this sweep confirms Stage 13's audit held, not a new
+finding.
+
+### ADR-120: Queue + memory usage review — clean, no changes
+
+`QUEUE_CONNECTION=database`, and the four `ShouldQueue` notifications
+(`PasswordChanged`, `LoggedOutAllDevices`, `PasswordResetRequested`,
+`InvitationResent`, plus three pilot/admin ones) genuinely need a
+running worker — already documented, not newly discovered: DEPLOYMENT.md
+has a dedicated "Queue worker (non-negotiable)" section from an earlier
+stage, spelling out that `QUEUE_CONNECTION=database` only inserts a row
+without a worker actually processing it, with platform-specific setup
+for Laravel Cloud/Forge/bare VPS+Supervisor, and a checklist item that
+references it. Nothing to add here.
+
+The three scheduled background commands (`jobs:ingest-prices`,
+`jobs:generate-alerts`, `jobs:run-verification`, `routes/console.php`)
+are plain Artisan commands run in-process by the scheduler, not queued
+jobs — each was checked for unbounded memory growth: `IngestPricesAction`
+fetches one bidding zone's 24 hourly price points per run (trivially
+small); `GenerateAlertsAction` and `RunVerificationAction` iterate
+organizations one at a time with a per-organization query rather than
+one cross-tenant load (bounded by organization count, and the natural
+shape of tenant-scoped batch logic, not an N+1 defect); `BackfillPricesAction`
+explicitly chunks by date range (`chunkDateRange()`,
+`self::DEFAULT_CHUNK_DAYS`) and reports per-chunk progress rather than
+buffering the whole backfill in memory. `UploadMeterReadingsAction`
+(the one user-request-path bulk-write endpoint) upserts in batches via
+`array_chunk($rows, self::UPSERT_BATCH_SIZE)`, and the request itself is
+already bounded to 10MB by `StoreMeterUploadRequest` (Stage 15's own
+file-upload review, ADR-116). `config/queue.php` is stock Laravel
+defaults (90s `retry_after`), appropriate for these lightweight
+notification jobs. No code changes.
