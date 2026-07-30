@@ -12,17 +12,18 @@ use Illuminate\Notifications\Notification;
  * on-demand to config('mail.pilot_notification_address'), not to the
  * applicant.
  *
- * Deliberately hardcodes its own `from` address rather than using the
- * app-wide `MAIL_FROM_ADDRESS` (config/mail.php's `from`, matching v2's
- * `RESEND_FROM_ADDRESS`) — v2's notifyTeam() does the identical thing,
- * always sending from the unverified-domain `onboarding@resend.dev`
- * rather than the verified `notifications@hetkin.app` every other
- * outbound email uses. That's safe specifically for this one email only
- * because it always sends to `CONTACT_EMAIL` (the account owner's own
- * inbox) — Resend restricts an unverified domain to sending only to the
- * account owner's own verified address, so unlike the customer-facing
- * invite emails, this internal one was never blocked by domain
- * verification and never needed the fix.
+ * Uses the app-wide `MAIL_FROM_ADDRESS` (config/mail.php's `from`), same
+ * as every other outbound email — this used to hardcode its own `from` of
+ * Resend's unverified-domain `onboarding@resend.dev` instead, matching
+ * v2's notifyTeam() and reasoning that it was safe because this email
+ * only ever sends to `CONTACT_EMAIL` (the account owner's own inbox),
+ * which Resend is documented to always allow regardless of domain
+ * verification. In production that assumption didn't hold — this send
+ * failed with the same "domain not verified" error real customer-facing
+ * sends were hitting, confirmed via Resend's own dashboard logs. There's
+ * no reason to keep a second, unreliable sender identity around once the
+ * real fix (verifying `hetkin.app` as a sending domain) covers every
+ * outbound email including this one.
  *
  * Deliberately NOT `ShouldQueue` — v2 always awaits its email send inline,
  * as part of the same request/response cycle, with no queue system at
@@ -49,7 +50,6 @@ class PilotApplicationSubmitted extends Notification
         $app = $this->application;
 
         $message = (new MailMessage)
-            ->from('onboarding@resend.dev', 'Hetkin pilot applications')
             ->subject("[Hetkin] Pilot application — {$app->company_name} (ICP {$app->icp_score})")
             ->line('NEW PILOT APPLICATION')
             ->line("Company: {$app->company_name}")
