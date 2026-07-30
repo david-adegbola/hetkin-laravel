@@ -80,6 +80,7 @@ review) — building it earlier would mean building it twice.
 | 13. Technical Modernization | **Complete** | ADR-96..ADR-102. bfcache middleware extended to portal/admin, baseline security headers, PHPStan+baseline, unused `laravel/breeze` removed, 27 pages gained `<Head title>`, performance/architecture reviewed with no gaps found. |
 | 14. Progressive Web Application (PWA) | **Complete** | ADR-103..ADR-109. Customer portal and admin console each install as independent PWAs (own manifest/scope/icons/cache); hand-rolled classic-script Service Worker allow-lists only static assets, never protected content; install eligibility gated server-side (`PwaSurface`) and kept correct across in-app SPA navigation. Three bugs caught by design review before implementation, a fourth (SPA-navigation sync) found via live browser testing — see [PWA.md](PWA.md). |
 | Post-Stage-14: Customer portal sign-out control | **Complete** | ADR-110..ADR-112. User-raised question surfaced the customer portal had no sign-out link at all (added one; found and fixed a pre-existing nested-`<button>` bug that silently broke the admin console's own "Sign out" too), then that pressing back afterward still restored the stale authenticated page — traced to Inertia's own client-side history cache (a third mechanism, distinct from ADR-14's HTTP headers), fixed via `Inertia::clearHistory()` + `EncryptHistoryMiddleware`. Also fixed customer login always landing on Dashboard rather than honoring a stashed pre-login "intended" URL — a deliberate product decision, not a bug. |
+| 15. Production Readiness | **Complete** | ADR-113..ADR-128. Two real, fixed security/access gaps (invite-accept password oracle had no rate limit; CSP had been deliberately deferred out of Stage 13 pending live-integration testing — implemented nonce-based via `Vite::useCspNonce()`); one real bundle-size fix (PostHog/Sentry moved to dynamic imports, main chunk -38%); two real accessibility fixes (six pages with no `<h1>`, no skip-links anywhere) found and fixed by actually tabbing through the app in a browser, not just reading source; a real health-check gap closed (`/up` now verifies DB connectivity, not just that the framework booted); everything else (dependency audit, authorization/IDOR review, N+1/index sweep, mass-assignment review, queue/memory review, migration rollback — actually executed against real data, not just read — observability review, DEPLOYMENT.md accuracy pass, responsive breakpoints, and a full public-application-to-first-upload golden path run live end-to-end) came back clean, documented as such rather than silently skipped. |
 
 ## Architecture Decisions
 
@@ -3985,3 +3986,51 @@ its site/metering point/meter readings/member/invitation, and the
 verified back down to exactly the two original seeded accounts
 (`owner@hetkin.test`, `admin@hetkin.test`) — the dev database is
 handed back clean, not left with throwaway test clutter.
+
+### ADR-129: Stage 15 complete — final validation pass, migration project done
+
+Every item in Stage 15's own task list (#150–164, this file's "Production
+Readiness" scope) is complete, each with its own ADR (ADR-113 through
+ADR-128) documenting what was actually checked and what, if anything,
+changed as a result. Of the sixteen areas reviewed, five produced real,
+fixed findings and the rest came back clean:
+
+- **Real findings, fixed**: the invite-accept endpoint was an
+  unthrottled password oracle (ADR-115); CSP had been deliberately
+  deferred out of Stage 13 pending exactly this kind of dedicated,
+  live-verified pass (ADR-117); the main JS bundle carried the full
+  weight of two analytics SDKs into the critical path regardless of
+  whether either was configured (ADR-118); six pages had no `<h1>` and
+  neither portal nor admin had a skip-link, both found by actually
+  tabbing through the app rather than reading source (ADR-125); `/up`
+  checked nothing but "did the framework boot," not whether the
+  database — the one dependency almost everything else here rests on —
+  was actually reachable (ADR-122).
+- **Reviewed and confirmed clean**: dependency audit (ADR-113),
+  authorization/IDOR review (ADR-114), file upload + mass assignment
+  (ADR-116), N+1/index sweep (ADR-119), queue + memory usage (ADR-120),
+  migration rollback — actually executed against the real dev database,
+  not just read for a `down()` method (ADR-121), observability
+  (ADR-123), DEPLOYMENT.md accuracy (ADR-124), responsive breakpoints at
+  mobile/tablet/desktop (ADR-126), and a full public-application-to-
+  first-upload golden path run live end-to-end (ADR-128).
+
+Final validation, run once more after every change in this stage:
+`php artisan test` (539/539), `./vendor/bin/pint --test`,
+`./vendor/bin/phpstan analyse` (clean, Stage 13's baseline still holds),
+`tsc --noEmit`, `eslint`, `npm run test:js` (6/6, the Service Worker
+cache-allowlist unit tests from Stage 14), `npm run build` (clean, no
+chunk-size warning — the first time that warning hasn't appeared since
+Stage 11 introduced PostHog/Sentry), and `composer audit` (clean). Every
+commit in this stage was made locally only — nothing was pushed to any
+remote, per this session's own standing constraint against touching
+shared/external systems without it being unambiguously safe.
+
+This closes MIGRATION_PLAN.md's full stage list. Hetkin's Laravel +
+Inertia + React port — customer portal, admin console, and marketing
+site, each independently installable as a PWA, all three sharing one
+codebase — is feature-complete relative to the Next.js original (v2),
+with the deliberate scope differences documented throughout this file's
+ADR log (no self-serve signup, no session-replay, no unused Policies
+turned into a customer-facing member-management UI v2 itself never
+shipped either) rather than left as unexplained gaps.
