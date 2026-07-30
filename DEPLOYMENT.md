@@ -74,11 +74,12 @@ managing the actual box.
   worker story will leave those two gaps unsolved (see below), and won't
   give you a way to run `queue:work` or `schedule:run` continuously at all.
 
-## The two gaps no `.env` file can fix
+## The three gaps no `.env` file can fix
 
-Both of these are already fully built into the app (Stage 10's job
-commands, Stage 11's queued Account Security notifications) — they just
-need a process actually running them.
+All three of these are already fully built into the app (Stage 10's job
+commands, Stage 11's queued Account Security notifications, Stage 15's
+health check) — they just need a process, or a platform setting,
+actually pointed at them.
 
 ### Queue worker (non-negotiable)
 
@@ -113,6 +114,27 @@ minute.
 - **Forge:** scheduler is on by default for every site (it adds the
   `* * * * * php artisan schedule:run` cron entry for you).
 - **Bare VPS:** add that exact crontab line yourself.
+
+### Health check
+
+`GET /up` (`bootstrap/app.php`'s `health: '/up'`) checks more than "did
+the framework boot": `App\Providers\AppServiceProvider` listens for
+Laravel's `DiagnosingHealth` event and verifies the database is actually
+reachable (`DB::connection()->getPdo()`), returning 500 if not.
+Worth being deliberate about that scope: `SESSION_DRIVER`,
+`CACHE_STORE`, and `QUEUE_CONNECTION` all default to `database`, so a
+database outage silently takes out sessions, caching, and the queue too
+— checking the database is checking the single dependency nearly
+everything else here is built on. Point your platform's uptime
+monitor/load balancer health check at this URL:
+
+- **Laravel Cloud:** health checks against `/up` are automatic — no
+  extra configuration needed, this is what the platform already expects.
+- **Forge:** Server → your site → **Application** → "Heartbeat
+  Interval"/health check path — set it to `/up` if not already the
+  default.
+- **Bare VPS / external monitor (UptimeRobot, Pingdom, etc.):** point it
+  at `https://yourdomain.com/up`, expect `200`, alert on anything else.
 
 ## Environment variables: what to set and where to get each one
 
@@ -236,6 +258,9 @@ php artisan view:cache
       actually arrives, not just that the request succeeds
 - [ ] Scheduler running (see [Scheduler](#scheduler)) — verify the next
       day by checking `admin/jobs` shows a recent `ingest-prices` run
+- [ ] Uptime monitor / load balancer health check pointed at `/up` (see
+      [Health check](#health-check)) — confirm it currently reports
+      healthy, not just that it's configured
 - [ ] Resend domain verified, `RESEND_API_KEY` + `MAIL_MAILER=resend` set
 - [ ] `ENTSO_E_TOKEN` set (or knowingly deferred — price ingestion fails
       closed, not silently, until it is)

@@ -24,12 +24,17 @@ use App\Policies\SchedulePolicy;
 use App\Policies\SessionPolicy;
 use App\Policies\SitePolicy;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use RuntimeException;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -129,5 +134,29 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Site::class, SitePolicy::class);
         Gate::policy(MeteringPoint::class, MeteringPointPolicy::class);
         Gate::policy(ProductionSchedule::class, SchedulePolicy::class);
+
+        // Stage 15 finding: Laravel's own `/up` route (bootstrap/app.php's
+        // `health: '/up'`) dispatches this event but ships with no
+        // listener at all — by default it only confirms the framework
+        // itself booted, not that anything it depends on is actually
+        // reachable. That's a meaningful gap here specifically because
+        // SESSION_DRIVER, CACHE_STORE, and QUEUE_CONNECTION all default
+        // to `database` (.env.example): a database outage would silently
+        // take out sessions, cache, and the queue while `/up` kept
+        // returning 200, exactly the false-positive a monitor/load
+        // balancer relies on this endpoint to avoid. Throwing here is the
+        // documented extension point (see
+        // Illuminate\Foundation\Configuration\ApplicationBuilder's health
+        // route: an exception caught from this event turns the response
+        // into a 500, and — outside local/testing, where app()->hasDebugModeEnabled()
+        // is typically true and Laravel rethrows instead — also reports it
+        // through the normal exception handler, i.e. Sentry too.
+        Event::listen(DiagnosingHealth::class, function () {
+            try {
+                DB::connection()->getPdo();
+            } catch (Throwable $e) {
+                throw new RuntimeException('Health check failed: database unreachable.', previous: $e);
+            }
+        });
     }
 }

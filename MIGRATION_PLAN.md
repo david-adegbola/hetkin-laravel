@@ -3742,3 +3742,46 @@ in `invited_by_user_id`, non-JSON-serializable content in `metadata`).
 Not a defect to fix — a known, accepted characteristic of type-narrowing
 rollbacks in general, noted here so a future incident (a rollback that
 fails specifically on one of these two tables) isn't a surprise.
+
+### ADR-122: Health check — `/up` checked nothing but "did the framework boot"; now also verifies the database is reachable
+
+`bootstrap/app.php`'s `health: '/up'` uses Laravel's built-in health
+route, which dispatches an `Illuminate\Foundation\Events\DiagnosingHealth`
+event and returns 200 unless something throws while handling it — with
+no listener registered, that meant `/up` returned 200 even during a full
+database outage, since booting the framework doesn't require a live DB
+query. That's a real gap for a monitoring endpoint specifically: a load
+balancer or uptime monitor relying on it would never detect the
+database going down, and this app leans on the database more than most
+— `SESSION_DRIVER`, `CACHE_STORE`, and `QUEUE_CONNECTION` all default to
+`database` (`.env.example`), so a DB outage silently takes out sessions,
+caching, and the queue right along with it, all invisible to `/up`.
+
+`App\Providers\AppServiceProvider::boot()` now registers a
+`DiagnosingHealth` listener that calls `DB::connection()->getPdo()`,
+throwing a `RuntimeException` (wrapping the original) on failure —
+Laravel's own health route (confirmed by reading
+`ApplicationBuilder::buildRoutingCallback()`) turns any exception caught
+here into a 500, and reports it through the normal exception handler
+(Sentry included) outside local/testing. New tests
+(`tests/Feature/HealthCheckTest.php`): the happy path (`/up` → 200), and
+a genuine failure path — not mocked, an actual unreachable Postgres
+connection (`host 127.0.0.1, port 1`, nothing listens there, so the
+connection fails fast rather than timing out) swapped in as
+`database.default` for the one request, restored in a `finally` before
+the test closure returns. That restoration turned out to matter: the
+first version of this test left the broken connection in place when the
+closure ended, and `tests/Pest.php`'s global `RefreshDatabase` trait
+tried to roll back its wrapping transaction against that same broken
+default connection afterward, itself throwing — a good reminder that
+this event fires mid-request, so any test simulating its failure has to
+account for what runs after the request too, not just the request
+itself.
+
+`DEPLOYMENT.md` gained a third entry in what was "The two gaps no `.env`
+file can fix" (now three): a **Health check** section explaining the
+scope decision above and giving the platform-specific pointer (Laravel
+Cloud checks `/up` automatically; Forge needs the health-check path set
+under Application; anything else needs an external monitor pointed at
+it manually) — plus a first-deploy checklist item to actually confirm
+it reports healthy post-deploy, not just that it's configured.
