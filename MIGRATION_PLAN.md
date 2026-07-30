@@ -3819,3 +3819,24 @@ DEPLOYMENT.md's environment variable table from an earlier stage (the
 `Log::`/`logger()` call site in the app for password/token/secret/API-key
 adjacent logging — none found; no risk of credentials leaking into log
 output. No code changes.
+
+### ADR-124: DEPLOYMENT.md final accuracy pass — every cross-reference verified against the actual codebase, clean
+
+Read the document end-to-end and checked every concrete claim against
+the code it describes, not just against itself: `PWA.md#versioning--…`
+and `README.md#test-accounts`/`#optional-integrations` anchors resolve
+to real headings (`PWA.md:186`, `README.md:121`/`194`); `ADR-12` and
+`ADR-21` (cited for the Octane constraint and subdomain routing) both
+exist in this file at the referenced line numbers; `bootstrap/app.php`'s
+`trustProxies(at: '*')` and `admin/jobs` (`routes/admin-protected.php`)
+are both exactly as described; all 16 environment variables named in
+the tables (`APP_DOMAIN`, `SESSION_DOMAIN`, `RESEND_API_KEY`,
+`ENTSO_E_TOKEN`, `POSTHOG_KEY`/`VITE_POSTHOG_KEY`,
+`SENTRY_LARAVEL_DSN`/`VITE_SENTRY_DSN`, `APP_VERSION`, etc.) exist
+verbatim in `.env.example`; and `composer.json` confirms `dompdf` and
+`sentry/sentry-laravel` are both in `require`, not `require-dev`, so the
+documented `composer install --no-dev` deploy step doesn't silently
+strip either one. The only content added during this stage's own work
+was the Health check section (ADR-122) — everything that predated
+Stage 15 held up without correction. No changes beyond what ADR-122
+already made.
