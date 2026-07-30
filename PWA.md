@@ -1,10 +1,8 @@
 # Progressive Web App
 
 How Hetkin's two installable apps — the customer portal and the admin
-console — actually work under the hood. See
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md)'s Stage 14 section for the original
-brief and ADR log; this document is the practical "how it works, how to
-touch it" reference.
+console — actually work under the hood. This document is the practical
+"how it works, how to touch it" reference.
 
 ## Three surfaces, two installable identities
 
@@ -13,7 +11,7 @@ marketing site, the customer portal, and the admin console. Portal and
 admin are each reachable two ways — a real subdomain
 (`dashboard.{domain}`, `admin.{domain}`) or a path prefix on the main
 domain (`/dashboard/*`, `/admin/*`), depending on whether `APP_DOMAIN`
-subdomains are actually configured (see `MIGRATION_PLAN.md`'s ADR-21).
+subdomains are actually configured.
 `App\Support\PwaSurface` is the one place that detects which surface a
 request belongs to and what that surface's manifest `start_url`/`scope`
 should be for either mode — every other PWA-related piece (the manifest

@@ -1,15 +1,9 @@
-# Hetkin (Laravel)
+# Hetkin
 
-Hetkin helps manufacturing companies shift flexible production to cheaper
-electricity hours. This repository is a from-scratch rewrite of the
-original Next.js app (`hetkin-v2`) onto Laravel — same behavior, same
-URLs, same product, new stack. See [MIGRATION_PLAN.md](MIGRATION_PLAN.md)
-for the full staged plan and the architecture decision record (ADR) log
-behind every non-obvious choice made along the way.
-
-**Status:** Stages 1–12 (the full migration) are complete and verified —
-487 passing tests, clean `tsc`/ESLint/Pint, a clean production build.
-Stage 13 (post-migration technical modernization) has not started.
+Hetkin helps manufacturing companies shift flexible production to
+cheaper electricity hours: it compares a customer's production schedule
+against real day-ahead electricity prices, recommends which shifts to
+move, and verifies the resulting savings.
 
 This document covers running the app locally. Deploying it live —
 where each environment variable comes from and the recommended hosting
@@ -162,9 +156,9 @@ composer test
 php artisan test
 ```
 
-487 tests, ~1,500 assertions, using an in-memory SQLite database (see
-`phpunit.xml`) regardless of what `.env` is configured with — the test
-suite never touches your dev database.
+Uses an in-memory SQLite database (see `phpunit.xml`) regardless of
+what `.env` is configured with — the test suite never touches your dev
+database.
 
 Frontend checks:
 
@@ -219,11 +213,6 @@ Organizations,Metering,Scheduling,Optimization,Billing,Pilots,Jobs}/
 Strategies}`. Inertia pages live in `resources/js/Pages`, organized by
 the same realms as the routes (`Portal/`, `Admin/`, `Marketing/`,
 `PilotProgram/`).
-
-For *why* something is built the way it is, check
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md) — every non-obvious decision has
-a numbered ADR explaining the reasoning and, where relevant, the v2
-behavior it's matching.
 
 ## License
 

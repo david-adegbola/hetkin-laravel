@@ -1,5 +1,12 @@
 *.log
 .DS_Store
+
+# Internal-only docs — not for public/external distribution: migration
+# history and pre-migration architecture analysis, neither of which a
+# fresh clone of this repo needs.
+/MIGRATION_PLAN.md
+/ARCHITECTURE_ANALYSIS.md
+
 .env
 .env.backup
 .env.production

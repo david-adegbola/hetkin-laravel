@@ -1,11 +1,7 @@
 # Deployment
 
 A practical checklist for taking Hetkin live: what to set, where each
-credential comes from, and the recommended hosting path. This is the
-immediate, get-it-running checklist — Stage 15 of
-[MIGRATION_PLAN.md](MIGRATION_PLAN.md) ("Production Readiness") covers the
-broader operational-excellence work (load testing, security review,
-accessibility audit, etc.) that comes after this.
+credential comes from, and the recommended hosting path.
 
 ## A hard architectural constraint, read this first
 
@@ -16,9 +12,9 @@ other long-running-worker runtime. `App\Http\Middleware\UseSessionRealm`
 session tables/cookies) mutates shared config at the start of every
 request; under a persistent worker that config can leak between requests
 served by the same worker, letting one realm's session bleed into the
-other's. See [MIGRATION_PLAN.md](MIGRATION_PLAN.md)'s ADR-12 for the full
-explanation. **Whatever host you choose, do not enable Octane (or any
-"Octane as runtime" toggle) unless ADR-12 is revisited first.**
+other's. **Whatever host you choose, do not enable Octane (or any
+"Octane as runtime" toggle) without first re-architecting that
+middleware to be safe under a persistent worker.**
 
 ## Where to host it
 
@@ -65,9 +61,9 @@ managing the actual box.
 
 ### Not recommended
 
-- **Vercel, Netlify, or other Next.js-oriented platforms** — this is a
-  PHP application now; nothing about v2's original Vercel deployment
-  carries over.
+- **Vercel, Netlify, or other Node/edge-runtime-oriented platforms** —
+  this is a standard PHP-FPM application; those platforms have no
+  first-class story for that runtime shape.
 - **Generic serverless-function platforms** unless you've independently
   confirmed they give you a real persistent process for the queue worker
   and scheduler — a stateless function-per-request platform with no
@@ -76,10 +72,10 @@ managing the actual box.
 
 ## The three gaps no `.env` file can fix
 
-All three of these are already fully built into the app (Stage 10's job
-commands, Stage 11's queued Account Security notifications, Stage 15's
-health check) — they just need a process, or a platform setting,
-actually pointed at them.
+All three of these are already fully built into the app (the scheduled
+job commands, the queued Account Security notifications, and the
+database-backed health check) — they just need a process, or a
+platform setting, actually pointed at them.
 
 ### Queue worker (non-negotiable)
 
@@ -154,7 +150,7 @@ fine without them, just with that feature dark.
 | `APP_ENV` | `production` | — |
 | `APP_DEBUG` | `false` | — (leaving this `true` in production leaks stack traces/env values to anyone who triggers an error) |
 | `APP_URL` | `https://hetkin.app` | Your real domain |
-| `APP_DOMAIN` | `hetkin.app` | Same domain, no scheme — drives the `dashboard.`/`admin.` subdomain routing (ADR-21) |
+| `APP_DOMAIN` | `hetkin.app` | Same domain, no scheme — drives the `dashboard.`/`admin.` subdomain routing |
 | `SESSION_DOMAIN` | `.hetkin.app` | Leading dot — shares the session cookie across the apex and both subdomains |
 | `SESSION_SECURE_COOKIE` | `true` | — (only correct once `trustProxies` — already wired in `bootstrap/app.php` — is actually sitting behind a real TLS-terminating proxy) |
 | `LOG_LEVEL` | `warning` (or `error`) | — `debug`'s local-dev default is too noisy for production logs |
