@@ -3,7 +3,7 @@ import RecommendationDecisionButtons from '@/Components/portal/RecommendationDec
 import { Badge } from '@/Components/ui/Badge';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
-import { formatEurCents } from '@/lib/format';
+import { formatEurCents, formatScheduleDateTime } from '@/lib/format';
 import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
@@ -281,7 +281,7 @@ export default function Dashboard({
                                                 <span>
                                                     {rec.decision.decision ===
                                                     'PARTIAL'
-                                                        ? `partially adopted — moved to ${rec.decision.adjusted_start_at ? new Date(rec.decision.adjusted_start_at).toLocaleString('en-GB') : '?'}`
+                                                        ? `partially adopted — moved to ${rec.decision.adjusted_start_at ? formatScheduleDateTime(rec.decision.adjusted_start_at) : '?'}`
                                                         : rec.decision.decision.toLowerCase()}
                                                     {rec.decision.reason
                                                         ? ` — "${rec.decision.reason}"`

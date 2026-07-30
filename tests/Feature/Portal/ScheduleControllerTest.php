@@ -61,6 +61,37 @@ test('submitting a valid block redirects back with a success status', function (
         ->toBe(LabourClassification::Unmanned);
 });
 
+/*
+ * Regression coverage for a real production incident: a pilot user typed
+ * "7am–3pm" (their own local wall-clock time, Finland) into the
+ * <input type="datetime-local"> and the app displayed it back as
+ * 10:00–18:00. Root cause was ScheduleController::store() calling
+ * Carbon::parse() with no timezone argument on that timezone-naive
+ * string, which interprets it in config('app.timezone') (UTC) — silently
+ * treating "7am Finland" as "7am UTC" instead of converting it. The fix
+ * parses in config('scheduling.timezone') (Europe/Helsinki) first, then
+ * converts to UTC for storage.
+ */
+test('a submitted start/end time is interpreted as Helsinki local time, not UTC', function () {
+    ['user' => $user] = portalUser();
+
+    $this->actingAs($user, 'web')->post(route('schedule.store'), [
+        'asset_label' => 'Extruder 2',
+        // Winter (EET, UTC+2) — deliberately not summer (EEST, UTC+3),
+        // so this test can't pass by coincidence if some other UTC+3
+        // constant were hardcoded instead of a real timezone conversion.
+        'start_at' => '2024-01-15T07:00',
+        'end_at' => '2024-01-15T15:00',
+        'labour_classification' => 'UNMANNED',
+    ]);
+
+    $block = ScheduleBlock::query()->latest('created_at')->first();
+
+    expect($block->start_at->equalTo(Carbon::parse('2024-01-15T07:00', 'Europe/Helsinki')))->toBeTrue();
+    expect($block->start_at->utc()->format('H:i'))->toBe('05:00');
+    expect($block->end_at->utc()->format('H:i'))->toBe('13:00');
+});
+
 test('labour classification must be a recognized value', function () {
     ['user' => $user] = portalUser();
 

@@ -80,12 +80,24 @@ class ScheduleController extends Controller
         /** @var User $user */
         $user = Auth::guard('web')->user();
 
+        // The browser's native <input type="datetime-local"> sends a
+        // timezone-naive string (e.g. "2026-07-31T07:00") — the site's
+        // physical wall-clock time, with no offset information at all.
+        // Carbon::parse() with no timezone argument would interpret that
+        // string as config('app.timezone') (UTC), silently corrupting
+        // "7am in Finland" into "7am UTC" — a real bug a live pilot user
+        // hit. Parsing in config('scheduling.timezone') first, then
+        // converting to UTC, is what actually stores the moment the user
+        // meant; see config/scheduling.php's own docblock for why this is
+        // a separate setting from the app's UTC system timezone.
+        $timezone = config('scheduling.timezone');
+
         $action->execute(
             $currentOrganization->get(),
             $user,
             $request->string('asset_label')->toString(),
-            Carbon::parse($request->string('start_at')->toString()),
-            Carbon::parse($request->string('end_at')->toString()),
+            Carbon::parse($request->string('start_at')->toString(), $timezone)->utc(),
+            Carbon::parse($request->string('end_at')->toString(), $timezone)->utc(),
             $request->filled('estimated_kwh') ? (float) $request->input('estimated_kwh') : null,
             LabourClassification::from($request->string('labour_classification')->toString()),
         );

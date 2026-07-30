@@ -36,8 +36,15 @@ class RecommendationController extends Controller
                 $recommendation,
                 RecommendationDecisionType::from($request->string('decision')->toString()),
                 $request->input('reason'),
+                // Same timezone-naive <input type="datetime-local"> shape,
+                // and the same fix, as ScheduleController::store() — see
+                // its own comment. This one carries the extra step of
+                // RecommendationDecisionButtons.tsx's toDatetimeLocalValue()
+                // pre-filling that input from an already-UTC ISO string, so
+                // both ends of this round trip need to agree on
+                // config('scheduling.timezone'), not just this write side.
                 $request->filled('adjusted_start_at')
-                    ? Carbon::parse($request->string('adjusted_start_at')->toString())
+                    ? Carbon::parse($request->string('adjusted_start_at')->toString(), config('scheduling.timezone'))->utc()
                     : null,
                 $request->filled('duration_minutes') ? (int) $request->input('duration_minutes') : null,
             );

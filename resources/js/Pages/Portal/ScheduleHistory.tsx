@@ -2,6 +2,7 @@ import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import { Badge } from '@/Components/ui/Badge';
 import { Card } from '@/Components/ui/Card';
 import PortalLayout from '@/Layouts/PortalLayout';
+import { formatScheduleDateTime } from '@/lib/format';
 import { Head } from '@inertiajs/react';
 import { ReactElement } from 'react';
 
@@ -91,9 +92,9 @@ export default function ScheduleHistory({
                                             ? ''
                                             : 's'}{' '}
                                         ·{' '}
-                                        {new Date(
+                                        {formatScheduleDateTime(
                                             version.created_at,
-                                        ).toLocaleString('en-GB')}
+                                        )}
                                         {version.submitted_by
                                             ? ` · ${version.submitted_by}`
                                             : ''}
@@ -136,17 +137,13 @@ export default function ScheduleHistory({
                                                         {b.asset_label}
                                                     </td>
                                                     <td className="py-2 pr-4">
-                                                        {new Date(
+                                                        {formatScheduleDateTime(
                                                             b.start_at,
-                                                        ).toLocaleString(
-                                                            'en-GB',
                                                         )}
                                                     </td>
                                                     <td className="py-2 pr-4">
-                                                        {new Date(
+                                                        {formatScheduleDateTime(
                                                             b.end_at,
-                                                        ).toLocaleString(
-                                                            'en-GB',
                                                         )}
                                                     </td>
                                                     <td className="py-2 pr-4">

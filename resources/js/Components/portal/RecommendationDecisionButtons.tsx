@@ -1,5 +1,6 @@
 import { Button } from '@/Components/ui/Button';
 import { FieldError, Input, Label, Textarea } from '@/Components/ui/Input';
+import { toHelsinkiDatetimeLocalValue } from '@/lib/format';
 import { router } from '@inertiajs/react';
 import { FormEventHandler, useState } from 'react';
 
@@ -14,10 +15,6 @@ import { FormEventHandler, useState } from 'react';
  */
 
 type Mode = 'idle' | 'reject' | 'partial';
-
-function toDatetimeLocalValue(iso: string): string {
-    return iso.slice(0, 16);
-}
 
 export default function RecommendationDecisionButtons({
     base,
@@ -35,7 +32,7 @@ export default function RecommendationDecisionButtons({
     const [error, setError] = useState<string | null>(null);
     const [reason, setReason] = useState('');
     const [adjustedStartAt, setAdjustedStartAt] = useState(
-        toDatetimeLocalValue(proposedStartAt),
+        toHelsinkiDatetimeLocalValue(proposedStartAt),
     );
 
     const durationMinutes = Math.round(
@@ -114,7 +111,8 @@ export default function RecommendationDecisionButtons({
         return (
             <form onSubmit={submitPartial} className="w-full max-w-sm">
                 <Label htmlFor={`partial-time-${recommendationId}`}>
-                    Move it to (instead of the full proposed shift)
+                    Move it to (instead of the full proposed shift) — Helsinki
+                    time
                 </Label>
                 <Input
                     id={`partial-time-${recommendationId}`}

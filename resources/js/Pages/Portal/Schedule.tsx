@@ -4,6 +4,7 @@ import { Button } from '@/Components/ui/Button';
 import { Card } from '@/Components/ui/Card';
 import { FieldError, Input, Label, Select } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
+import { formatScheduleDateTime } from '@/lib/format';
 import { usePortalBasePath } from '@/lib/subdomain';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useState } from 'react';
@@ -86,7 +87,7 @@ function AddBlockForm({ base }: { base: string }) {
                 <FieldError>{errors.asset_label}</FieldError>
             </div>
             <div>
-                <Label htmlFor="start_at">Start</Label>
+                <Label htmlFor="start_at">Start (Helsinki time)</Label>
                 <Input
                     id="start_at"
                     type="datetime-local"
@@ -97,7 +98,7 @@ function AddBlockForm({ base }: { base: string }) {
                 <FieldError>{errors.start_at}</FieldError>
             </div>
             <div>
-                <Label htmlFor="end_at">End</Label>
+                <Label htmlFor="end_at">End (Helsinki time)</Label>
                 <Input
                     id="end_at"
                     type="datetime-local"
@@ -351,14 +352,10 @@ export default function Schedule({
                                             {b.asset_label}
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {new Date(
-                                                b.start_at,
-                                            ).toLocaleString('en-GB')}
+                                            {formatScheduleDateTime(b.start_at)}
                                         </td>
                                         <td className="py-2 pr-4">
-                                            {new Date(b.end_at).toLocaleString(
-                                                'en-GB',
-                                            )}
+                                            {formatScheduleDateTime(b.end_at)}
                                         </td>
                                         <td className="py-2 pr-4">
                                             {b.estimated_kwh
