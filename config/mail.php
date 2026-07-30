@@ -124,8 +124,17 @@ return [
     | apply/actions.ts's notifyTeam()) — where the internal "new pilot
     | application" notification goes.
     |
+    | Deliberately `env('CONTACT_EMAIL') ?: 'hello@hetkin.app'`, not the
+    | two-argument `env('CONTACT_EMAIL', 'hello@hetkin.app')` form: env()'s
+    | default only applies when the key is genuinely absent, not when it's
+    | present-but-blank — and .env.example ships CONTACT_EMAIL= (present,
+    | blank) as its documented "optional, falls back" default. The
+    | two-argument form would silently resolve to an empty destination
+    | address on any environment that copied .env.example as-is and never
+    | filled this in, rather than actually falling back.
+    |
     */
 
-    'pilot_notification_address' => env('CONTACT_EMAIL', 'hello@hetkin.app'),
+    'pilot_notification_address' => env('CONTACT_EMAIL') ?: 'hello@hetkin.app',
 
 ];
