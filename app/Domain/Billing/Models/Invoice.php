@@ -32,6 +32,16 @@ class Invoice extends Model
 
     public $timestamps = false;
 
+    protected static function booted(): void
+    {
+        static::saving(function (self $invoice): void {
+            // As with a savings assessment's net amount, total_cents is a
+            // stored projection of its components, never a separately
+            // editable billing input.
+            $invoice->total_cents = $invoice->totalCents();
+        });
+    }
+
     /** See App\Domain\Organizations\Models\Organization::newFactory()'s docblock. */
     protected static function newFactory(): InvoiceFactory
     {
@@ -47,6 +57,11 @@ class Invoice extends Model
             'paid_at' => 'datetime',
             'created_at' => 'datetime',
         ];
+    }
+
+    public function totalCents(): int
+    {
+        return (int) $this->base_fee_cents + (int) $this->savings_share_cents;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Domain\Billing\Reports;
 
+use App\Domain\Metering\Enums\MeterDataSource;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Pricing\Models\ElectricityPrice;
@@ -24,14 +25,17 @@ use Illuminate\Support\Collection;
  */
 class SavingsReportViewModelBuilder
 {
+    private const DISPLAY_TIMEZONE = 'Europe/Helsinki';
+
     private const GLOSSARY = [
-        ['ICP score', 'Ideal Customer Profile fit score (0–100), used to triage pilot applications — not a gate.'],
         ['Baseline', 'The reference annual electricity cost this assessment compares an optimized schedule against.'],
         ['Provisional', "Not yet through Hetkin's methodology/legal review — treat the figure as an estimate, not final."],
         ['Locked baseline', 'A baseline whose cost/assumption fields are frozen and used for ongoing monthly verification.'],
         ['Bidding zone', 'The regional electricity market Hetkin sources day-ahead prices for (FI = Finland).'],
         ['Day-ahead price', 'The spot price for electricity delivered the following day, set by the Nord Pool/ENTSO-E auction.'],
         ['Net customer savings', "Estimated annual savings after Hetkin's revenue-share fee is deducted."],
+        ['Delivery risk', 'The operational disruption risk of moving this production block. Low means a small timing change; medium means a material rescheduling effort; high means a large same-day shift that needs closer production review.'],
+        ['Negative electricity price', 'A real market condition: when supply, such as wind or hydro, exceeds demand, producers may effectively pay consumers to use electricity.'],
     ];
 
     /**
@@ -43,8 +47,30 @@ class SavingsReportViewModelBuilder
         $organization = $data->organization;
         $baseline = $data->baseline;
 
+        // Single source of truth for "does this customer have a fee set
+        // yet" — distinct from "the fee is genuinely zero." Both
+        // previously collapsed to hetkin_share_cents === 0, which is why
+        // the report could show a fabricated number in one place and
+        // "n/a"/€0.00 in another for the exact same underlying state.
+        $feeConfigured = $organization->revenue_share_percent !== null;
+
+        // The headline savings figure (ProvisionalHeuristicStrategy) is
+        // computed purely from raw meter readings + prices — it applies
+        // the same 30%-shiftable assumption to every organization
+        // regardless of whether any of their load has actually been
+        // confirmed flexible. "Confirmed" here means the closest thing
+        // this app has to real evidence of that: at least one real
+        // schedule block marked Unmanned with a known energy draw — the
+        // exact same eligibility check the optimizer itself uses
+        // (ScheduleBlock::isEligibleForOptimization()). Distinct from
+        // $hasRecommendations below: a customer can have confirmed,
+        // eligible blocks and still have zero recommendations if
+        // optimization hasn't been run yet.
+        $productionProfileConfirmed = $data->scheduleBlocks->contains(fn ($b) => $b->isEligibleForOptimization());
+        $hasRecommendations = $data->recommendations->isNotEmpty();
+
         $periodLabel = self::formatDateRange($assessment->period_start, $assessment->period_end);
-        $generatedLabel = $assessment->generated_at->format('d/m/Y')." · Methodology {$baseline->methodology_version}";
+        $generatedLabel = Carbon::parse($assessment->generated_at, 'UTC')->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y')." · Methodology {$baseline->methodology_version}";
 
         $avgLoadProfile = self::buildAvgLoadProfile($data->readings);
         [$heatmap, $trend, $minPrice, $maxPrice] = self::buildMarket($data->prices);
@@ -53,15 +79,39 @@ class SavingsReportViewModelBuilder
         $waterfall = [
             ['label' => 'Total projected savings', 'delta_cents' => $assessment->estimated_annual_savings_cents, 'cumulative_cents' => $assessment->estimated_annual_savings_cents, 'kind' => 'start'],
             ['label' => "Hetkin's service fee", 'delta_cents' => -$assessment->hetkin_share_cents, 'cumulative_cents' => $assessment->estimated_annual_savings_cents - $assessment->hetkin_share_cents, 'kind' => 'decrease'],
-            ['label' => 'Net customer savings', 'delta_cents' => 0, 'cumulative_cents' => $assessment->net_customer_savings_cents, 'kind' => 'end'],
+            ['label' => 'Net customer savings', 'delta_cents' => 0, 'cumulative_cents' => $assessment->estimated_annual_savings_cents - $assessment->hetkin_share_cents, 'kind' => 'end'],
         ];
 
+        // The report's net figure is always derived from the two displayed
+        // components. This makes the arithmetic auditable even if a legacy
+        // assessment row contains a stale denormalized net value.
+        $netCustomerSavingsCents = $assessment->estimated_annual_savings_cents - $assessment->hetkin_share_cents;
+
         $savingsToFeeRatio = $assessment->hetkin_share_cents > 0
-            ? $assessment->net_customer_savings_cents / $assessment->hetkin_share_cents
+            ? $netCustomerSavingsCents / $assessment->hetkin_share_cents
             : null;
         $savingsPercent = $assessment->current_annual_cost_cents > 0
             ? $assessment->estimated_annual_savings_cents / $assessment->current_annual_cost_cents * 100
             : 0.0;
+
+        // One string, computed once, used everywhere a fee-related figure
+        // would otherwise appear — the KPI box, the ROI sentence, and the
+        // savings table's fee/net rows all read from this same value
+        // rather than each independently deciding how to render "no fee
+        // yet," which is exactly how the KPI ("n/a"), the savings table
+        // (a fabricated €0.00), and the waterfall (duplicated net value,
+        // a separate bug) ended up showing three different things for
+        // the same underlying state.
+        $netAfterFeeValue = match (true) {
+            ! $feeConfigured => 'Fee not yet configured',
+            $savingsToFeeRatio !== null => self::formatDecimal($savingsToFeeRatio, 1).'x ROI',
+            default => 'No fee — 100% retained',
+        };
+        $roiLabel = match (true) {
+            ! $feeConfigured => 'Fee not yet configured',
+            $savingsToFeeRatio !== null => self::formatDecimal($savingsToFeeRatio, 1)."x — every €1 of Hetkin's fee returns ".self::formatDecimal($savingsToFeeRatio, 1).'x in net customer savings',
+            default => "No fee applies to this assessment — 100% of savings go to {$organization->name}.",
+        };
 
         $current = $data->scheduleBlocks->map(fn (ScheduleBlock $b) => self::toBar($b->start_at, $b->end_at, $b->asset_label, $heatmap))->values()->all();
         $recommendedBars = $data->recommendations->map(fn (Recommendation $r) => self::toBar(
@@ -71,22 +121,26 @@ class SavingsReportViewModelBuilder
         $calloutLines = $data->recommendations->take(4)->map(function (Recommendation $r) {
             $asset = $r->scheduleBlock?->asset_label ?? 'This block';
 
-            return "{$asset} — {$r->rationale} (".Money::formatEurCents($r->projected_savings_cents).'/period)';
+            return "{$asset} — ".self::formatRationale($r->rationale).' ('.Money::formatEurCents($r->projected_savings_cents).' per occurrence)';
         })->values()->all();
 
         $recommendationRows = $data->recommendations->map(fn (Recommendation $r) => [
             'title' => ($r->scheduleBlock?->asset_label ?? 'Proposed change').': '
-                .$r->proposed_start_at->copy()->utc()->format('H:i').'–'.$r->proposed_end_at->copy()->utc()->format('H:i'),
-            'rationale' => $r->rationale,
-            'savings_label' => Money::formatEurCents($r->projected_savings_cents),
+                .$r->proposed_start_at->copy()->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y H:i').'–'.$r->proposed_end_at->copy()->timezone(self::DISPLAY_TIMEZONE)->format('H:i'),
+            'rationale' => self::formatRationale($r->rationale),
+            'savings_label' => Money::formatEurCents($r->projected_savings_cents).' per occurrence',
             'complexity' => $r->delivery_risk->value,
             'business_impact' => $r->business_impact ?? 'Not specified',
         ])->values()->all();
 
-        $assumptions = collect($baseline->assumptions ?? [])
-            ->reject(fn ($v, $k) => $k === 'note')
-            ->map(fn ($v, $k) => [self::titleCase($k), self::formatAssumptionValue($v)])
-            ->values()->all();
+        $rawAssumptionsJson = $baseline->getRawOriginal('assumptions');
+        $rawAssumptions = is_string($rawAssumptionsJson)
+            ? json_decode($rawAssumptionsJson, true)
+            : null;
+        $rawAssumptions = is_array($rawAssumptions) ? $rawAssumptions : [];
+        $assumptions = self::buildAssumptions($rawAssumptions);
+        $flexPct = (float) ($rawAssumptions['flexPct'] ?? 0.3);
+        $cheapHours = (int) ($rawAssumptions['cheapHoursPerDay'] ?? 3);
         $exclusions = [
             'Grid connection fees and taxes, unless explicitly listed in Assumptions below',
             'Equipment ramp-up/ramp-down energy draw not separately metered',
@@ -99,11 +153,14 @@ class SavingsReportViewModelBuilder
             : null;
 
         $isProvisional = $assessment->is_provisional;
+        // Never presented with full confidence (a 'cheap'/positive tone,
+        // an unqualified label) unless a real production profile backs
+        // the number — see $productionProfileConfirmed's own comment.
         $kpis = [
-            ['label' => 'Annual savings', 'value' => Money::formatEurCents($assessment->estimated_annual_savings_cents), 'tone' => 'cheap'],
-            ['label' => 'Monthly savings', 'value' => Money::formatEurCents((int) round($assessment->estimated_annual_savings_cents / 12)), 'tone' => 'cheap'],
-            ['label' => 'Avg. cost reduction', 'value' => number_format($savingsPercent, 1).'%', 'tone' => 'cheap'],
-            ['label' => 'Net after Hetkin fee', 'value' => $savingsToFeeRatio !== null ? number_format($savingsToFeeRatio, 1).'x ROI' : 'n/a', 'tone' => 'neutral'],
+            ['label' => $productionProfileConfirmed ? 'Annual savings' : 'Annual savings (illustrative)', 'value' => Money::formatEurCents($assessment->estimated_annual_savings_cents), 'tone' => $productionProfileConfirmed ? 'cheap' : 'neutral'],
+            ['label' => 'Monthly savings', 'value' => Money::formatEurCents((int) round($assessment->estimated_annual_savings_cents / 12)), 'tone' => $productionProfileConfirmed ? 'cheap' : 'neutral'],
+            ['label' => $productionProfileConfirmed ? 'Avg. cost reduction' : 'Avg. cost reduction (illustrative)', 'value' => self::formatDecimal($savingsPercent, 1).'%', 'tone' => $productionProfileConfirmed ? 'cheap' : 'neutral'],
+            ['label' => 'Net after Hetkin fee', 'value' => $netAfterFeeValue, 'tone' => 'neutral'],
         ];
 
         $processTypeLabel = $organization->process_type?->label() ?? 'Not set';
@@ -111,7 +168,12 @@ class SavingsReportViewModelBuilder
         return [
             'cover' => [
                 'organization_name' => $organization->name,
-                'report_title' => 'Savings Assessment Report',
+                // Issue 3's fix: a report with no real recommendations
+                // yet reads as unfinished under the "Assessment" framing
+                // ("here's what to change" left blank) — "Diagnostic"
+                // reframes the same empty state as an intentional first
+                // step in a sequence.
+                'report_title' => $hasRecommendations ? 'Savings Assessment Report' : 'Savings Diagnostic',
                 'period_label' => $periodLabel,
                 'generated_label' => $generatedLabel,
                 'version' => $data->versionNumber,
@@ -123,63 +185,106 @@ class SavingsReportViewModelBuilder
                 'situation' => "{$organization->name}'s production schedule currently runs against the electricity spot market rather than with it.",
                 'kpis' => $kpis,
                 'waterfall_thumbnail' => $waterfall,
+                'fee_configured' => $feeConfigured,
+                'production_profile_confirmed' => $productionProfileConfirmed,
+                'confidence_badge' => $isProvisional
+                    ? 'Provisional · '.($assessment->sample_day_count ?? 'limited').' day sample · not yet verified'
+                    : null,
+                'confidence_note' => $productionProfileConfirmed
+                    ? null
+                    : 'The figures above assume '.self::formatDecimal($flexPct * 100, 0).'% of load is shiftable to the '.$cheapHours.' cheapest hours per day — a working estimate, not yet confirmed against '.$organization->name."'s actual production schedule. Add a production schedule with at least one Unmanned block and an estimated energy use to move this from illustrative to confirmed.",
+                'assumption_summary' => 'Estimate assumes '.self::formatDecimal($flexPct * 100, 0).'% of load can move to the '.$cheapHours.' cheapest hours each day'.($productionProfileConfirmed ? '.' : '; this is not yet confirmed against your production schedule.'),
                 'key_recommendations' => collect($recommendationRows)->take(3)->pluck('title')->values()->all(),
-                'roi_label' => $savingsToFeeRatio !== null
-                    ? number_format($savingsToFeeRatio, 1)."x — every €1 of Hetkin's fee returns ".number_format($savingsToFeeRatio, 1).'x in net customer savings'
-                    : 'Fee not yet configured',
+                'roi_label' => $roiLabel,
                 'status_note' => $isProvisional
                     ? 'This is a provisional estimate based on '.($assessment->sample_day_count ?? 'an unspecified number of').' days of metered data. It has not yet been through Hetkin\'s methodology review — see Methodology, below.'
                     : null,
-                'next_steps' => [
-                    'Review the recommended schedule changes with production leadership (see Production Schedule Optimization).',
-                    'Approve and lock the baseline to begin monthly verification.',
-                    'Contact Hetkin to discuss implementation support for the highest-savings recommendations.',
-                ],
+                'next_steps' => $hasRecommendations
+                    ? [
+                        'Review the recommended schedule changes with production leadership (see Production Schedule Optimization).',
+                        'Approve and lock the baseline to begin monthly verification.',
+                        'Contact Hetkin to discuss implementation support for the highest-savings recommendations.',
+                    ]
+                    : [
+                        'Add a production schedule (or confirm the existing one) so recommendations can be generated against real, confirmed load data.',
+                        'Run the optimization engine once at least one Unmanned block has an estimated energy use.',
+                        'Contact Hetkin if you\'d like help scoping which lines/assets are realistically shiftable.',
+                    ],
             ],
             'customer_overview' => [
                 'company_name' => $organization->name,
                 'process_type_label' => $processTypeLabel,
                 'period_label' => $periodLabel,
-                'metering_points' => $data->meteringPoints->map(fn ($mp) => [
-                    'label' => $mp->label,
-                    'site_name' => $mp->site->name,
-                    'data_source' => $mp->data_source->value,
-                    'healthy' => $mp->connection_healthy,
-                ])->values()->all(),
+                'metering_points' => $data->meteringPoints->map(function ($mp) {
+                    $dataSource = $mp->data_source;
+                    $isManualUpload = $dataSource === MeterDataSource::ManualUpload->value;
+
+                    return [
+                        'label' => $mp->label,
+                        'site_name' => $mp->site->name,
+                        'data_source' => $isManualUpload ? 'Manual upload' : 'Datahub connection',
+                        'status_label' => $isManualUpload
+                            ? 'Data received'
+                            : ($mp->connection_healthy ? 'Healthy' : 'Needs attention'),
+                    ];
+                })->values()->all(),
                 'data_coverage' => [
                     'day_count' => $assessment->sample_day_count,
                     'hour_count' => $coveredHours,
                     'expected_hour_count' => $expectedHours,
                 ],
-                // No pilot-funnel domain yet (Stage 8) — see this class's docblock.
-                'production_profile' => 'Not provided.',
+                // Issue 18's fix: this free-text field (what the
+                // customer told Hetkin about their process during the
+                // pilot application) and "do we have confirmed
+                // equipment-level schedule data" are two genuinely
+                // different things — a customer can have detailed
+                // schedule blocks on file while never having filled in
+                // this description, or vice versa. Previously this was
+                // hardcoded to "Not provided." unconditionally (a
+                // leftover from before the pilot-funnel domain existed),
+                // which contradicted a report that also showed full
+                // equipment-level recommendations. Now genuinely wired to
+                // PilotApplication.win_condition, with the separate
+                // 'production_data_status' below making clear that a
+                // blank description here does NOT mean no schedule data
+                // exists.
+                'production_profile' => $organization->pilotApplication?->win_condition ?: 'Not provided.',
+                'production_data_status' => $productionProfileConfirmed
+                    ? 'Confirmed — at least one Unmanned schedule block with a known energy use is on file.'
+                    : 'Not yet confirmed — no Unmanned schedule block with a known energy use is on file yet.',
             ],
             'baseline' => [
                 'current_annual_cost_label' => Money::formatEurCents($assessment->current_annual_cost_cents),
                 'avg_load_profile' => $avgLoadProfile,
                 'peak_cost_hours' => $peakCostHours,
                 'cost_driver_note' => count($peakCostHours) > 0
-                    ? 'Consumption during hours '.implode(', ', $peakCostHours).":00 overlaps with this period's most expensive electricity — the primary driver of avoidable cost."
+                    ? 'Consumption during local Finland hours '.implode(', ', $peakCostHours).":00 overlaps with this period's most expensive electricity — the primary driver of avoidable cost."
                     : 'Not enough matched price data to identify specific cost-driving hours.',
             ],
             'market' => [
                 'heatmap' => $heatmap,
-                'min_price_label' => $minPrice !== null ? '€'.number_format($minPrice, 0).'/MWh' : 'n/a',
-                'max_price_label' => $maxPrice !== null ? '€'.number_format($maxPrice, 0).'/MWh' : 'n/a',
+                'min_price_label' => $minPrice !== null ? self::formatEurPerMwh($minPrice) : 'n/a',
+                'max_price_label' => $maxPrice !== null ? self::formatEurPerMwh($maxPrice) : 'n/a',
                 'volatility_note' => ($minPrice !== null && $maxPrice !== null)
-                    ? 'Prices ranged from €'.number_format($minPrice, 0).' to €'.number_format($maxPrice, 0).' per MWh over this period — a '.number_format($maxPrice / max($minPrice, 1), 1).'x spread between the cheapest and most expensive hour.'
+                    ? 'Prices ranged from '.self::formatEurPerMwh($minPrice).' to '.self::formatEurPerMwh($maxPrice).' over this period — a '.self::formatDecimal($maxPrice / max(abs($minPrice), 1), 1).'x spread between the cheapest and most expensive hour.'
                     : 'Insufficient price data for this period.',
                 'trend' => $trend,
+                'trend_mode' => count($trend) > 14 ? 'chart' : 'table',
+                'negative_price_note' => $minPrice !== null && $minPrice < 0
+                    ? 'Negative prices are a real Nordic market condition: when electricity supply exceeds demand, producers may effectively pay consumers to use electricity.'
+                    : null,
+                'sensitivity_note' => self::buildSensitivityNote($trend),
             ],
             'savings' => [
                 'waterfall' => $waterfall,
+                'fee_configured' => $feeConfigured,
                 'table' => [
                     ['Current annual cost', Money::formatEurCents($assessment->current_annual_cost_cents)],
                     ['Optimized annual cost', Money::formatEurCents($assessment->optimized_annual_cost_cents)],
                     ['Total projected savings', Money::formatEurCents($assessment->estimated_annual_savings_cents)],
-                    ['Savings percentage', number_format($savingsPercent, 1).'%'],
-                    ["Hetkin's service fee", Money::formatEurCents($assessment->hetkin_share_cents)],
-                    ['Net customer savings', Money::formatEurCents($assessment->net_customer_savings_cents)],
+                    ['Savings percentage', self::formatDecimal($savingsPercent, 1).'%'],
+                    ["Hetkin's service fee", $feeConfigured ? Money::formatEurCents($assessment->hetkin_share_cents) : 'Fee not yet configured'],
+                    ['Net customer savings', $feeConfigured ? Money::formatEurCents($netCustomerSavingsCents) : 'Fee not yet configured'],
                 ],
             ],
             'schedule' => [
@@ -193,10 +298,9 @@ class SavingsReportViewModelBuilder
             'methodology' => [
                 'strategy_label' => $baseline->methodology_version,
                 'status_label' => $isProvisional ? 'Provisional — not yet through methodology review' : 'Reviewed',
-                'sample_day_count' => $assessment->sample_day_count,
                 'coverage_note' => $expectedHours !== null
-                    ? number_format($coveredHours).' of '.number_format($expectedHours).' expected hourly readings ('.round($coveredHours / $expectedHours * 100).'% coverage)'
-                    : number_format($coveredHours).' hourly readings',
+                    ? self::formatDecimal((float) $coveredHours, 0).' of '.self::formatDecimal((float) $expectedHours, 0).' expected hourly readings ('.self::formatDecimal(round($coveredHours / $expectedHours * 100), 0).'% coverage)'
+                    : self::formatDecimal((float) $coveredHours, 0).' hourly readings',
                 'price_source' => 'ENTSO-E Transparency Platform, day-ahead auction, Finland (FI) bidding zone',
                 'assumptions' => $assumptions,
                 'exclusions' => $exclusions,
@@ -215,29 +319,7 @@ class SavingsReportViewModelBuilder
             return 'Period not recorded';
         }
 
-        return $start->format('d/m/Y').' – '.$end->format('d/m/Y');
-    }
-
-    private static function titleCase(string $key): string
-    {
-        $spaced = preg_replace('/([a-z])([A-Z])/', '$1 $2', $key);
-
-        return ucfirst(trim($spaced));
-    }
-
-    private static function formatAssumptionValue(mixed $value): string
-    {
-        if (is_int($value) || is_float($value)) {
-            return fmod((float) $value, 1.0) === 0.0 ? (string) (int) $value : number_format((float) $value, 4, '.', '');
-        }
-        if (is_bool($value)) {
-            return $value ? 'yes' : 'no';
-        }
-        if ($value === null) {
-            return '-';
-        }
-
-        return (string) $value;
+        return $start->copy()->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y').' – '.$end->copy()->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y');
     }
 
     /**
@@ -248,7 +330,7 @@ class SavingsReportViewModelBuilder
     {
         $byHour = [];
         foreach ($readings as $r) {
-            $hour = $r->hour_start->copy()->utc()->hour;
+            $hour = $r->hour_start->copy()->timezone(self::DISPLAY_TIMEZONE)->hour;
             $byHour[$hour]['total'] = ($byHour[$hour]['total'] ?? 0) + (float) $r->consumption_kwh;
             $byHour[$hour]['count'] = ($byHour[$hour]['count'] ?? 0) + 1;
         }
@@ -276,11 +358,11 @@ class SavingsReportViewModelBuilder
             $minPrice = $minPrice === null ? $eur : min($minPrice, $eur);
             $maxPrice = $maxPrice === null ? $eur : max($maxPrice, $eur);
 
-            $hour = $p->hour_start->copy()->utc()->hour;
+            $hour = $p->hour_start->copy()->timezone(self::DISPLAY_TIMEZONE)->hour;
             $byHour[$hour]['total'] = ($byHour[$hour]['total'] ?? 0) + $eur;
             $byHour[$hour]['count'] = ($byHour[$hour]['count'] ?? 0) + 1;
 
-            $dayKey = $p->hour_start->copy()->utc()->format('Y-m-d');
+            $dayKey = $p->hour_start->copy()->timezone(self::DISPLAY_TIMEZONE)->format('Y-m-d');
             $byDay[$dayKey]['total'] = ($byDay[$dayKey]['total'] ?? 0) + $eur;
             $byDay[$dayKey]['count'] = ($byDay[$dayKey]['count'] ?? 0) + 1;
         }
@@ -296,7 +378,7 @@ class SavingsReportViewModelBuilder
         $trend = [];
         foreach ($byDay as $day => $entry) {
             $trend[] = [
-                'label' => Carbon::parse($day, 'UTC')->format('d M'),
+                'label' => Carbon::parse($day, self::DISPLAY_TIMEZONE)->format('d M'),
                 'avg_eur_per_mwh' => $entry['total'] / $entry['count'],
             ];
         }
@@ -325,8 +407,8 @@ class SavingsReportViewModelBuilder
      */
     private static function toBar(Carbon $startAt, Carbon $endAt, string $assetLabel, array $heatmap): array
     {
-        $start = $startAt->copy()->utc();
-        $end = $endAt->copy()->utc();
+        $start = $startAt->copy()->timezone(self::DISPLAY_TIMEZONE);
+        $end = $endAt->copy()->timezone(self::DISPLAY_TIMEZONE);
         $startHour = $start->hour + $start->minute / 60;
         $endHour = $end->hour + $end->minute / 60;
         if ($endHour <= $startHour) {
@@ -337,9 +419,60 @@ class SavingsReportViewModelBuilder
 
         return [
             'asset_label' => $assetLabel,
+            'date_label' => $start->format('d/m/Y'),
+            'time_label' => $start->format('H:i').'–'.$end->format('H:i').' Finland time',
             'start_hour' => $startHour,
             'end_hour' => $endHour,
             'tier' => $midCell['tier'] ?? 'unknown',
         ];
+    }
+
+    /** @param array<string, mixed> $raw */
+    private static function buildAssumptions(array $raw): array
+    {
+        $assumptions = [];
+        if (isset($raw['flexPct'])) {
+            $assumptions[] = ['Share of load assumed shiftable', self::formatDecimal((float) $raw['flexPct'] * 100, 1).'%'];
+        }
+        if (isset($raw['cheapHoursPerDay'])) {
+            $assumptions[] = ['Cheapest hours targeted per day', (string) $raw['cheapHoursPerDay'].' hours'];
+        }
+        if (isset($raw['annualizeFactor'])) {
+            $days = $raw['sampleDayCount'] ?? null;
+            $sample = is_numeric($days) ? (int) $days.'-day sample' : 'sample period';
+            $assumptions[] = ['Annualization basis', "{$sample} × ".self::formatDecimal((float) $raw['annualizeFactor'], 2).' to estimate one year'];
+        }
+
+        return $assumptions;
+    }
+
+    private static function formatDecimal(float $value, int $decimals): string
+    {
+        return number_format($value, $decimals, ',', ' ');
+    }
+
+    private static function formatEurPerMwh(float $value): string
+    {
+        return self::formatDecimal($value, 1).' €/MWh';
+    }
+
+    private static function formatRationale(string $rationale): string
+    {
+        return preg_replace_callback('/~€(-?\d+(?:\.\d+)?)\/MWh/', fn (array $matches) => '~'.self::formatEurPerMwh((float) $matches[1]), $rationale) ?? $rationale;
+    }
+
+    /** @param array<int, array{label: string, avg_eur_per_mwh: float}> $trend */
+    private static function buildSensitivityNote(array $trend): ?string
+    {
+        if (count($trend) < 2) {
+            return null;
+        }
+
+        $average = array_sum(array_column($trend, 'avg_eur_per_mwh')) / count($trend);
+        $outliers = array_filter($trend, fn (array $point) => abs($point['avg_eur_per_mwh']) > max(1, abs($average) * 2));
+
+        return count($outliers) > 0
+            ? count($outliers).' of '.count($trend).' days had unusually volatile average prices; annualized savings may vary week to week.'
+            : null;
     }
 }

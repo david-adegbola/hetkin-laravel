@@ -20,6 +20,7 @@ use App\Domain\Billing\Exceptions\InsufficientDataException;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\SavingsAssessment;
 use App\Domain\Billing\Reports\Money;
+use App\Domain\Billing\Reports\SavingsReportLoader;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
@@ -57,6 +58,7 @@ class GenerateSavingsAssessmentAction
         private readonly CurrentOrganization $currentOrganization,
         private readonly CreateAlertAction $createAlertAction,
         private readonly PostHogService $postHog,
+        private readonly SavingsReportLoader $savingsReportLoader,
     ) {}
 
     /**
@@ -110,11 +112,8 @@ class GenerateSavingsAssessmentAction
                 ? ((float) $organization->revenue_share_percent) / 100
                 : 0.0;
             $hetkinShareCents = (int) round($result->estimatedAnnualSavingsCents * $revenueShareFraction);
-            $netCustomerSavingsCents = $result->estimatedAnnualSavingsCents - $hetkinShareCents;
-
             $assessment = DB::transaction(function () use (
-                $organization, $user, $result, $hetkinShareCents,
-                $netCustomerSavingsCents, $firstHour, $lastHour,
+                $organization, $user, $result, $hetkinShareCents, $firstHour, $lastHour,
             ) {
                 $baseline = Baseline::create([
                     'organization_id' => $organization->id,
@@ -132,7 +131,6 @@ class GenerateSavingsAssessmentAction
                     'optimized_annual_cost_cents' => $result->optimizedAnnualCostCents,
                     'estimated_annual_savings_cents' => $result->estimatedAnnualSavingsCents,
                     'hetkin_share_cents' => $hetkinShareCents,
-                    'net_customer_savings_cents' => $netCustomerSavingsCents,
                     'is_provisional' => $result->isProvisional,
                     'sample_day_count' => $result->sampleDayCount,
                     'period_start' => $firstHour,
@@ -153,6 +151,19 @@ class GenerateSavingsAssessmentAction
                         'sampleDayCount' => $result->sampleDayCount,
                     ],
                 ));
+
+                // Keep the report's customer-facing representation
+                // immutable. This remains in the transaction so a failed
+                // snapshot can never leave behind an assessment that looks
+                // generated but cannot be reproduced.
+                $reportData = $this->savingsReportLoader->load($assessment->id, $organization->id);
+                if ($reportData === null) {
+                    throw new \LogicException('A newly generated savings assessment could not be loaded for snapshotting.');
+                }
+                $assessment->forceFill([
+                    'report_snapshot' => $this->savingsReportLoader->viewModel($reportData),
+                ]);
+                $assessment->save();
 
                 return $assessment->refresh();
             });

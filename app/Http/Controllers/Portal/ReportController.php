@@ -11,7 +11,6 @@ use App\Domain\Billing\Models\SavingsAssessment;
 use App\Domain\Billing\Models\VerificationRecord;
 use App\Domain\Billing\Pdf\SavingsAssessmentPdfService;
 use App\Domain\Billing\Reports\SavingsReportLoader;
-use App\Domain\Billing\Reports\SavingsReportViewModelBuilder;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -88,7 +87,7 @@ class ReportController extends Controller
 
         return Inertia::render('Portal/ReportDetail', [
             'assessment_id' => $data->assessment->id,
-            'vm' => SavingsReportViewModelBuilder::build($data),
+            'vm' => $loader->viewModel($data),
         ]);
     }
 
@@ -106,7 +105,7 @@ class ReportController extends Controller
         $data = $loader->load($assessment, $organization->id);
         abort_if($data === null, 404);
 
-        $vm = SavingsReportViewModelBuilder::build($data);
+        $vm = $loader->viewModel($data);
 
         DB::transaction(function () use ($auditLogService, $user, $organization, $data) {
             $auditLogService->record(new AuditEvent(

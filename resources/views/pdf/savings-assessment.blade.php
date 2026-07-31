@@ -47,6 +47,9 @@
     li { margin-bottom: 4px; line-height: 1.4; }
     .schedule-row { position: relative; height: 22px; margin-bottom: 6px; background: #f3f4f6; border-radius: 3px; }
     .schedule-bar-fill { position: absolute; top: 0; height: 22px; border-radius: 3px; }
+    .callout { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 12px; margin: 0 0 10px 0; font-size: 10px; color: #78350f; }
+    .trend-chart { position: relative; height: 120px; margin: 10px 0 6px 0; border-bottom: 1px solid #ccc; display: flex; align-items: end; gap: 1px; }
+    .trend-bar { flex: 1; min-width: 1px; background: #4f46e5; }
 </style>
 </head>
 <body>
@@ -73,6 +76,10 @@
 <div class="section">
     <h2>Executive Summary</h2>
     <p>{{ $vm['executive_summary']['situation'] }}</p>
+    @if ($vm['executive_summary']['confidence_badge'])
+        <p><span class="badge badge-mid">{{ $vm['executive_summary']['confidence_badge'] }}</span></p>
+    @endif
+    <p class="muted">{{ $vm['executive_summary']['assumption_summary'] }}</p>
 
     <table class="kpi-table">
         <tr>
@@ -87,8 +94,16 @@
         </tr>
     </table>
 
+    @if ($vm['executive_summary']['confidence_note'])
+        <div class="callout">{{ $vm['executive_summary']['confidence_note'] }}</div>
+    @endif
+
     <h3>Savings waterfall</h3>
-    @include('pdf.partials.waterfall', ['waterfall' => $vm['executive_summary']['waterfall_thumbnail']])
+    @if ($vm['executive_summary']['fee_configured'])
+        @include('pdf.partials.waterfall', ['waterfall' => $vm['executive_summary']['waterfall_thumbnail']])
+    @else
+        <p class="muted">Hetkin's fee has not been configured for this customer yet — the savings breakdown will appear here once it is.</p>
+    @endif
 
     @if (count($vm['executive_summary']['key_recommendations']) > 0)
         <h3>Key recommendations</h3>
@@ -128,6 +143,7 @@
             @endif
         </td></tr>
         <tr><th>Production profile</th><td>{{ $vm['customer_overview']['production_profile'] }}</td></tr>
+        <tr><th>Production data</th><td>{{ $vm['customer_overview']['production_data_status'] }}</td></tr>
     </table>
 
     <h3>Metering points</h3>
@@ -139,7 +155,7 @@
                     <td>{{ $mp['label'] }}</td>
                     <td>{{ $mp['site_name'] }}</td>
                     <td>{{ $mp['data_source'] }}</td>
-                    <td>{{ $mp['healthy'] ? 'Healthy' : 'Needs attention' }}</td>
+                    <td>{{ $mp['status_label'] }}</td>
                 </tr>
             @empty
                 <tr><td colspan="4" class="muted">No metering points on record.</td></tr>
@@ -154,7 +170,7 @@
     <p>Current annual cost: <strong>{{ $vm['baseline']['current_annual_cost_label'] }}</strong></p>
     <p>{{ $vm['baseline']['cost_driver_note'] }}</p>
 
-    <h3>Average load profile (kWh by hour of day, UTC)</h3>
+    <h3>Average load profile (kWh by hour of day, Finland time)</h3>
     @php $maxKwh = max(1, ...array_column($vm['baseline']['avg_load_profile'], 'avg_kwh')); @endphp
     <div class="chart">
         @foreach ($vm['baseline']['avg_load_profile'] as $point)
@@ -168,8 +184,14 @@
     <h2>Electricity Market Analysis</h2>
     <p>Price range this period: {{ $vm['market']['min_price_label'] }} &ndash; {{ $vm['market']['max_price_label'] }}</p>
     <p>{{ $vm['market']['volatility_note'] }}</p>
+    @if ($vm['market']['negative_price_note'])
+        <p class="muted">{{ $vm['market']['negative_price_note'] }}</p>
+    @endif
+    @if ($vm['market']['sensitivity_note'])
+        <div class="callout">{{ $vm['market']['sensitivity_note'] }}</div>
+    @endif
 
-    <h3>Average price by hour of day, UTC</h3>
+    <h3>Average price by hour of day, Finland time</h3>
     <table>
         <tr class="heat-row">
             @foreach ($vm['market']['heatmap'] as $cell)
@@ -180,21 +202,31 @@
 
     @if (count($vm['market']['trend']) > 0)
         <h3>Daily average price trend</h3>
-        <table>
-            <thead><tr><th>Day</th><th>Avg &euro;/MWh</th></tr></thead>
-            <tbody>
+        @if ($vm['market']['trend_mode'] === 'chart')
+            @php $maxTrend = max(1, ...array_map(fn ($point) => abs($point['avg_eur_per_mwh']), $vm['market']['trend'])); @endphp
+            <div class="trend-chart">
                 @foreach ($vm['market']['trend'] as $point)
-                    <tr><td>{{ $point['label'] }}</td><td>{{ number_format($point['avg_eur_per_mwh'], 2) }}</td></tr>
+                    <div class="trend-bar" title="{{ $point['label'] }}: {{ number_format($point['avg_eur_per_mwh'], 1, ',', ' ') }} €/MWh" style="height: {{ max(2, abs($point['avg_eur_per_mwh']) / $maxTrend * 100) }}%;"></div>
                 @endforeach
-            </tbody>
-        </table>
+            </div>
+            <p class="muted">Each bar is one day. Detailed daily values are omitted from this customer summary for readability.</p>
+        @else
+            <table>
+                <thead><tr><th>Day</th><th>Avg. €/MWh</th></tr></thead>
+                <tbody>
+                    @foreach ($vm['market']['trend'] as $point)
+                        <tr><td>{{ $point['label'] }}</td><td>{{ number_format($point['avg_eur_per_mwh'], 2, ',', ' ') }}</td></tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
     @endif
 </div>
 
 {{-- Savings assessment --}}
 <div class="section">
     <h2>Savings Assessment</h2>
-    @include('pdf.partials.waterfall', ['waterfall' => $vm['savings']['waterfall']])
+    <p class="muted">The executive summary contains the visual savings waterfall. This section provides the detailed financial breakdown.</p>
     <table>
         <tbody>
             @foreach ($vm['savings']['table'] as [$label, $value])
@@ -213,7 +245,7 @@
         <div class="schedule-row">
             <div class="schedule-bar-fill heat-{{ $bar['tier'] }}" style="left: {{ $bar['start_hour'] / 24 * 100 }}%; width: {{ ($bar['end_hour'] - $bar['start_hour']) / 24 * 100 }}%;"></div>
         </div>
-        <p class="muted" style="margin-top: -4px;">{{ $bar['asset_label'] }}</p>
+        <p class="muted" style="margin-top: -4px;">{{ $bar['asset_label'] }} · {{ $bar['date_label'] }} · {{ $bar['time_label'] }}</p>
     @empty
         <p class="muted">No production schedule on record.</p>
     @endforelse
@@ -223,7 +255,7 @@
         <div class="schedule-row">
             <div class="schedule-bar-fill heat-{{ $bar['tier'] }}" style="left: {{ $bar['start_hour'] / 24 * 100 }}%; width: {{ ($bar['end_hour'] - $bar['start_hour']) / 24 * 100 }}%;"></div>
         </div>
-        <p class="muted" style="margin-top: -4px;">{{ $bar['asset_label'] }}</p>
+        <p class="muted" style="margin-top: -4px;">{{ $bar['asset_label'] }} · {{ $bar['date_label'] }} · {{ $bar['time_label'] }}</p>
     @empty
         <p class="muted">No recommendations on record.</p>
     @endforelse
@@ -262,7 +294,6 @@
     <table>
         <tr><th>Strategy</th><td>{{ $vm['methodology']['strategy_label'] }}</td></tr>
         <tr><th>Status</th><td>{{ $vm['methodology']['status_label'] }}</td></tr>
-        <tr><th>Sample days</th><td>{{ $vm['methodology']['sample_day_count'] ?? 'n/a' }}</td></tr>
         <tr><th>Coverage</th><td>{{ $vm['methodology']['coverage_note'] }}</td></tr>
         <tr><th>Price source</th><td>{{ $vm['methodology']['price_source'] }}</td></tr>
     </table>

@@ -9,6 +9,7 @@ use App\Domain\Billing\Enums\InvoiceStatus;
 use App\Domain\Billing\Exceptions\BillingActionException;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\VerificationRecord;
+use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Organizations\Scopes\OrganizationScope;
 use App\Models\AdminUser;
@@ -38,6 +39,20 @@ test('generateInvoice computes base fee plus revenue share', function () {
     expect($invoice->savings_share_cents)->toBe(20_000);
     expect($invoice->total_cents)->toBe(70_000);
     expect($invoice->status)->toBe(InvoiceStatus::Draft);
+});
+
+test('an invoice always derives its total from base and savings-share fees', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    $record = VerificationRecord::factory()->for($organization, 'organization')->create();
+
+    $invoice = Invoice::factory()->for($organization, 'organization')->for($record, 'verificationRecord')->create([
+        'base_fee_cents' => 10_000,
+        'savings_share_cents' => 2_500,
+        'total_cents' => 1,
+    ]);
+
+    expect($invoice->fresh()->total_cents)->toBe(12_500);
 });
 
 test('generateInvoice never bills a share of negative verified savings', function () {

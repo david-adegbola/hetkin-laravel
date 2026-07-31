@@ -8,6 +8,7 @@ use App\Domain\Billing\Enums\BaselineStatus;
 use App\Domain\Billing\Exceptions\BillingActionException;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\SavingsAssessment;
+use App\Domain\Billing\Reports\SavingsReportLoader;
 use App\Domain\Metering\Models\MeteringPoint;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Metering\Models\Site;
@@ -105,11 +106,45 @@ test('creates a DRAFT baseline and savings assessment with the golden-dataset fi
     expect($assessment->hetkin_share_cents)->toBe(0);
     expect($assessment->net_customer_savings_cents)->toBe(2_759_400);
     expect($assessment->is_provisional)->toBeTrue();
+    expect($assessment->report_snapshot)->toBeArray();
+    expect($assessment->report_snapshot['cover']['report_title'])->toBe('Savings Diagnostic');
 
     app(CurrentOrganization::class)->set($organization);
     $baseline = Baseline::query()->findOrFail($assessment->baseline_id);
     expect($baseline->status)->toBe(BaselineStatus::Draft);
     expect($baseline->baseline_annual_cost_cents)->toBe(10_950_000);
+});
+
+test('an assessment always derives net customer savings from its financial components', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    $baseline = Baseline::factory()->for($organization, 'organization')->create();
+
+    $assessment = SavingsAssessment::factory()->for($organization, 'organization')->for($baseline)->create([
+        'estimated_annual_savings_cents' => 100_000,
+        'hetkin_share_cents' => 20_000,
+        'net_customer_savings_cents' => 1,
+    ]);
+
+    expect($assessment->fresh()->net_customer_savings_cents)->toBe(80_000);
+});
+
+test('a generated report remains pinned to its generation-time snapshot', function () {
+    $organization = Organization::factory()->create(['revenue_share_percent' => 10]);
+    $user = User::factory()->create();
+    seedFlatSavingsWeek($organization, 100, 50);
+
+    $assessment = app(GenerateSavingsAssessmentAction::class)->execute($organization, $user);
+    $snapshot = $assessment->report_snapshot;
+
+    // A later commercial change must affect future assessments, never the
+    // document the customer already received.
+    $organization->update(['revenue_share_percent' => 99]);
+
+    app(CurrentOrganization::class)->set($organization);
+    $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
+
+    expect(app(SavingsReportLoader::class)->viewModel($data))->toBe($snapshot);
 });
 
 test('splits savings between the customer and Hetkin using the organization\'s revenue share', function () {

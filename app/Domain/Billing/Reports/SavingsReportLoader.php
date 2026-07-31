@@ -36,13 +36,27 @@ use Illuminate\Support\Collection;
  */
 class SavingsReportLoader
 {
+    /**
+     * New assessments persist this exact representation at generation time.
+     * Null keeps older assessments readable through the original live-data
+     * pathway, rather than making a schema rollout hide their reports.
+     *
+     * @return array<string, mixed>
+     */
+    public function viewModel(SavingsReportData $data): array
+    {
+        $snapshot = $data->assessment->getAttribute('report_snapshot');
+
+        return is_array($snapshot) ? $snapshot : SavingsReportViewModelBuilder::build($data);
+    }
+
     public function load(string $assessmentId, string $organizationId): ?SavingsReportData
     {
         /** @var SavingsAssessment|null $assessment */
         $assessment = SavingsAssessment::query()
             ->where('id', $assessmentId)
             ->where('organization_id', $organizationId)
-            ->with(['baseline', 'organization'])
+            ->with(['baseline', 'organization.pilotApplication'])
             ->first();
 
         if (! $assessment) {

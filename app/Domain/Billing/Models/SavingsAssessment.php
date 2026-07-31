@@ -23,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'optimized_annual_cost_cents', 'estimated_annual_savings_cents',
     'hetkin_share_cents', 'net_customer_savings_cents', 'is_provisional',
     'sample_day_count', 'period_start', 'period_end', 'report_pdf_url',
-    'generated_at',
+    'report_snapshot', 'generated_at',
 ])]
 class SavingsAssessment extends Model
 {
@@ -31,6 +31,17 @@ class SavingsAssessment extends Model
     use BelongsToOrganization, HasFactory, HasUlids;
 
     public $timestamps = false;
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $assessment): void {
+            // This is a denormalized convenience column, never an
+            // independently editable financial figure. Keeping it in sync
+            // at the model boundary protects every caller, not just the
+            // generation action or report renderer.
+            $assessment->net_customer_savings_cents = $assessment->netCustomerSavingsCents();
+        });
+    }
 
     /** See App\Domain\Organizations\Models\Organization::newFactory()'s docblock. */
     protected static function newFactory(): SavingsAssessmentFactory
@@ -46,7 +57,13 @@ class SavingsAssessment extends Model
             'period_start' => 'datetime',
             'period_end' => 'datetime',
             'generated_at' => 'datetime',
+            'report_snapshot' => 'array',
         ];
+    }
+
+    public function netCustomerSavingsCents(): int
+    {
+        return (int) $this->estimated_annual_savings_cents - (int) $this->hetkin_share_cents;
     }
 
     /**

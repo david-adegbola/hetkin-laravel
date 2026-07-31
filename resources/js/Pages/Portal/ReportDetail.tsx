@@ -26,6 +26,8 @@ interface HourCell {
 
 interface ScheduleBar {
     asset_label: string;
+    date_label: string;
+    time_label: string;
     start_hour: number;
     end_hour: number;
     tier: string;
@@ -54,6 +56,10 @@ interface ViewModel {
         situation: string;
         kpis: Kpi[];
         waterfall_thumbnail: WaterfallStep[];
+        fee_configured: boolean;
+        confidence_badge: string | null;
+        confidence_note: string | null;
+        assumption_summary: string;
         key_recommendations: string[];
         roi_label: string;
         status_note: string | null;
@@ -67,7 +73,7 @@ interface ViewModel {
             label: string;
             site_name: string;
             data_source: string;
-            healthy: boolean;
+            status_label: string;
         }>;
         data_coverage: {
             day_count: number | null;
@@ -75,6 +81,7 @@ interface ViewModel {
             expected_hour_count: number | null;
         };
         production_profile: string;
+        production_data_status: string;
     };
     baseline: {
         current_annual_cost_label: string;
@@ -88,9 +95,13 @@ interface ViewModel {
         max_price_label: string;
         volatility_note: string;
         trend: Array<{ label: string; avg_eur_per_mwh: number }>;
+        trend_mode: 'table' | 'chart';
+        negative_price_note: string | null;
+        sensitivity_note: string | null;
     };
     savings: {
         waterfall: WaterfallStep[];
+        fee_configured: boolean;
         table: Array<[string, string]>;
     };
     schedule: {
@@ -102,7 +113,6 @@ interface ViewModel {
     methodology: {
         strategy_label: string;
         status_label: string;
-        sample_day_count: number | null;
         coverage_note: string;
         price_source: string;
         assumptions: Array<[string, string]>;
@@ -231,8 +241,72 @@ function ScheduleBars({ bars }: { bars: ScheduleBar[] }) {
                     </div>
                     <div className="text-text-secondary mt-0.5 text-xs">
                         {bar.asset_label}
+                        <span className="ml-1">
+                            · {bar.date_label} · {bar.time_label}
+                        </span>
                     </div>
                 </div>
+            ))}
+        </div>
+    );
+}
+
+function DailyTrend({
+    trend,
+    mode,
+}: {
+    trend: ViewModel['market']['trend'];
+    mode: ViewModel['market']['trend_mode'];
+}) {
+    if (trend.length === 0) return null;
+
+    if (mode === 'table') {
+        return (
+            <table className="mt-3 w-full text-left text-xs">
+                <thead className="border-border text-text-secondary border-b uppercase">
+                    <tr>
+                        <th className="py-1">Day</th>
+                        <th className="py-1">Avg. €/MWh</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {trend.map((point) => (
+                        <tr
+                            key={point.label}
+                            className="border-border border-b"
+                        >
+                            <td className="py-1">{point.label}</td>
+                            <td className="py-1">
+                                {point.avg_eur_per_mwh.toLocaleString('fi-FI', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                })}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        );
+    }
+
+    const max = Math.max(
+        1,
+        ...trend.map((point) => Math.abs(point.avg_eur_per_mwh)),
+    );
+    return (
+        <div
+            className="border-border mt-3 flex h-28 items-end gap-px border-b"
+            aria-label="Daily average price trend"
+        >
+            {trend.map((point) => (
+                <div
+                    key={point.label}
+                    className="bg-accent flex-1"
+                    style={{
+                        height: `${Math.max(2, (Math.abs(point.avg_eur_per_mwh) / max) * 100)}%`,
+                    }}
+                    title={`${point.label}: ${point.avg_eur_per_mwh.toLocaleString('fi-FI', { maximumFractionDigits: 1 })} €/MWh`}
+                />
             ))}
         </div>
     );
@@ -279,6 +353,14 @@ export default function ReportDetail({
                 <p className="text-text-secondary mb-4 text-sm">
                     {vm.executive_summary.situation}
                 </p>
+                {vm.executive_summary.confidence_badge && (
+                    <div className="bg-warning/15 text-warning mb-3 inline-block rounded-full px-2 py-1 text-xs font-medium">
+                        {vm.executive_summary.confidence_badge}
+                    </div>
+                )}
+                <p className="text-text-secondary mb-3 text-xs">
+                    {vm.executive_summary.assumption_summary}
+                </p>
                 <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {vm.executive_summary.kpis.map((kpi) => (
                         <div
@@ -294,7 +376,21 @@ export default function ReportDetail({
                         </div>
                     ))}
                 </div>
-                <Waterfall steps={vm.executive_summary.waterfall_thumbnail} />
+                {vm.executive_summary.confidence_note && (
+                    <p className="rounded-control bg-warning/10 text-warning mb-3 p-3 text-xs">
+                        {vm.executive_summary.confidence_note}
+                    </p>
+                )}
+                {vm.executive_summary.fee_configured ? (
+                    <Waterfall
+                        steps={vm.executive_summary.waterfall_thumbnail}
+                    />
+                ) : (
+                    <p className="text-text-secondary text-xs">
+                        Hetkin’s fee has not been configured for this customer
+                        yet — the savings breakdown will appear once it is.
+                    </p>
+                )}
                 {vm.executive_summary.key_recommendations.length > 0 && (
                     <div className="mt-4">
                         <h3 className="text-primary mb-1 text-xs font-semibold">
@@ -328,6 +424,22 @@ export default function ReportDetail({
                             </th>
                             <td className="py-1.5">
                                 {vm.customer_overview.company_name}
+                            </td>
+                        </tr>
+                        <tr className="border-border border-b">
+                            <th className="text-text-secondary py-1.5 text-xs font-medium">
+                                Production profile
+                            </th>
+                            <td className="py-1.5">
+                                {vm.customer_overview.production_profile}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th className="text-text-secondary py-1.5 text-xs font-medium">
+                                Production data
+                            </th>
+                            <td className="py-1.5">
+                                {vm.customer_overview.production_data_status}
                             </td>
                         </tr>
                         <tr className="border-border border-b">
@@ -374,9 +486,7 @@ export default function ReportDetail({
                                             {mp.site_name}
                                         </td>
                                         <td className="py-1.5">
-                                            {mp.healthy
-                                                ? 'Healthy'
-                                                : 'Needs attention'}
+                                            {mp.status_label}
                                         </td>
                                     </tr>
                                 ),
@@ -394,7 +504,7 @@ export default function ReportDetail({
                     </strong>
                 </p>
                 <h3 className="text-primary mb-1 text-xs font-semibold">
-                    Average load profile (kWh by hour of day, UTC)
+                    Average load profile (kWh by hour of day, Finland time)
                 </h3>
                 <LoadProfileChart profile={vm.baseline.avg_load_profile} />
                 <p className="text-text-secondary mt-3 text-xs">
@@ -411,10 +521,33 @@ export default function ReportDetail({
                 <p className="text-text-secondary mt-3 text-xs">
                     {vm.market.volatility_note}
                 </p>
+                {vm.market.negative_price_note && (
+                    <p className="text-text-secondary mt-2 text-xs">
+                        {vm.market.negative_price_note}
+                    </p>
+                )}
+                {vm.market.sensitivity_note && (
+                    <p className="rounded-control bg-warning/10 text-warning mt-2 p-2 text-xs">
+                        {vm.market.sensitivity_note}
+                    </p>
+                )}
+                <h3 className="text-primary mt-4 mb-1 text-xs font-semibold">
+                    Daily average price trend
+                </h3>
+                <DailyTrend
+                    trend={vm.market.trend}
+                    mode={vm.market.trend_mode}
+                />
             </SectionCard>
 
             <SectionCard title="Savings Assessment">
-                <Waterfall steps={vm.savings.waterfall} />
+                {vm.savings.fee_configured && (
+                    <p className="text-text-secondary text-xs">
+                        The executive summary contains the visual savings
+                        waterfall; this table provides the detailed financial
+                        breakdown.
+                    </p>
+                )}
                 <table className="mt-4 w-full text-left text-sm">
                     <tbody>
                         {vm.savings.table.map(([label, value]) => (

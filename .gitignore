@@ -6,6 +6,7 @@
 # fresh clone of this repo needs.
 /MIGRATION_PLAN.md
 /ARCHITECTURE_ANALYSIS.md
+/Hetkin savings report fix prompt.md
 
 .env
 .env.backup
