@@ -74,6 +74,8 @@ return function (): void {
 
         Route::get('schedule', [ScheduleController::class, 'index'])->name('schedule');
         Route::post('schedule', [ScheduleController::class, 'store'])->name('schedule.store');
+        Route::get('schedule/import', [ScheduleController::class, 'createImport'])->name('schedule.import');
+        Route::post('schedule/import', [ScheduleController::class, 'storeImport'])->name('schedule.import.store');
         Route::post('schedule/optimize', [ScheduleController::class, 'optimize'])->name('schedule.optimize');
         Route::post('schedule/apply-decisions', [ScheduleController::class, 'applyDecisions'])->name('schedule.apply-decisions');
         Route::get('schedule/history', [ScheduleController::class, 'history'])->name('schedule.history');

@@ -49,6 +49,11 @@ interface ApplyDecisionsStatus {
     blocksChanged: number;
 }
 
+interface ImportStatus {
+    rowsWritten: number;
+    newVersion: number;
+}
+
 function AddBlockForm({ base }: { base: string }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         asset_label: '',
@@ -254,11 +259,13 @@ export default function Schedule({
     pendingDecisionCount,
     optimizationStatus,
     applyDecisionsStatus,
+    status,
 }: {
     schedule: ScheduleData | null;
     pendingDecisionCount: number;
     optimizationStatus?: OptimizationStatus;
     applyDecisionsStatus?: ApplyDecisionsStatus;
+    status?: ImportStatus | string;
 }) {
     const base = usePortalBasePath();
 
@@ -271,16 +278,29 @@ export default function Schedule({
                     Add a schedule block
                 </h3>
                 <p className="text-text-secondary mb-4 text-xs">
-                    Add each production run manually for now — a CSV/ERP import
-                    path is planned once there is a real export format to build
-                    against. A block needs both an estimated energy use and an
-                    Unmanned labour classification to be considered when running
-                    optimization — Labour Bound blocks (shifting them means
-                    someone works a different time) are tracked here but never
-                    turned into a recommendation.
+                    Add a production run manually, or import an ERP-exported CSV
+                    as a new schedule version. A block needs both an estimated
+                    energy use and an Unmanned labour classification to be
+                    considered when running optimization — Labour Bound blocks
+                    (shifting them means someone works a different time) are
+                    tracked here but never turned into a recommendation.
                 </p>
+                <Link
+                    href={`${base}/schedule/import`}
+                    className="text-accent mb-4 inline-block text-sm font-medium hover:underline"
+                >
+                    Import ERP schedule CSV
+                </Link>
                 <AddBlockForm base={base} />
             </Card>
+
+            {typeof status !== 'string' && status && (
+                <div className="bg-success-subtle text-success mb-4 rounded-lg px-4 py-3 text-sm font-medium">
+                    Imported {status.rowsWritten.toLocaleString()} schedule
+                    block{status.rowsWritten === 1 ? '' : 's'} as version{' '}
+                    {status.newVersion}.
+                </div>
+            )}
 
             {!schedule || schedule.blocks.length === 0 ? (
                 <Card className="text-text-secondary py-12 text-center text-sm">

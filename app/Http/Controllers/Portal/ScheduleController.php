@@ -10,10 +10,13 @@ use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Scheduling\Actions\AddScheduleBlockAction;
+use App\Domain\Scheduling\Actions\ImportScheduleBlocksAction;
 use App\Domain\Scheduling\Enums\LabourClassification;
+use App\Domain\Scheduling\Exceptions\InvalidScheduleCsvException;
 use App\Domain\Scheduling\Models\ProductionSchedule;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Portal\StoreScheduleBlockRequest;
+use App\Http\Requests\Portal\StoreScheduleImportRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
@@ -69,6 +72,7 @@ class ScheduleController extends Controller
             // MIGRATION_PLAN.md ADR-20/ADR-36.
             'optimizationStatus' => session('optimizationStatus'),
             'applyDecisionsStatus' => session('applyDecisionsStatus'),
+            'status' => session('status'),
         ]);
     }
 
@@ -103,6 +107,37 @@ class ScheduleController extends Controller
         );
 
         return back()->with('status', 'schedule-block-added');
+    }
+
+    public function createImport(): Response
+    {
+        return Inertia::render('Portal/ScheduleImport', ['status' => session('status')]);
+    }
+
+    public function storeImport(
+        StoreScheduleImportRequest $request,
+        ImportScheduleBlocksAction $action,
+        CurrentOrganization $currentOrganization,
+    ): RedirectResponse {
+        /** @var User $user */
+        $user = Auth::guard('web')->user();
+        $file = $request->file('file');
+
+        try {
+            $result = $action->execute(
+                $currentOrganization->get(),
+                $user,
+                $file->get(),
+                $file->getClientOriginalName(),
+            );
+        } catch (InvalidScheduleCsvException $e) {
+            return back()->withErrors(['file' => $e->getMessage()]);
+        }
+
+        return redirect()->route('schedule')->with('status', [
+            'rowsWritten' => $result->rowsWritten,
+            'newVersion' => $result->schedule->version,
+        ]);
     }
 
     public function optimize(

@@ -4,7 +4,7 @@ import { Card } from '@/Components/ui/Card';
 import { FieldError } from '@/Components/ui/Input';
 import PortalLayout from '@/Layouts/PortalLayout';
 import { usePortalBasePath } from '@/lib/subdomain';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler, ReactElement, useRef } from 'react';
 
 interface UploadStatus {
@@ -80,8 +80,15 @@ export default function DataUpload({ status }: { status?: UploadStatus }) {
                                 hourly readings.
                             </p>
                             <p className="text-text-secondary mt-1.5 text-sm">
-                                Your data is saved and ready.
+                                Your data is saved and ready. See your report to
+                                generate or review your savings assessment.
                             </p>
+                            <Link
+                                href={`${base}/reports`}
+                                className="bg-accent hover:bg-accent-hover rounded-control mt-3 inline-flex h-9 items-center justify-center px-3.5 text-[13px] font-medium text-white transition-colors"
+                            >
+                                See report
+                            </Link>
                         </div>
                     )}
 
