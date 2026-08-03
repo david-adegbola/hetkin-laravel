@@ -47,10 +47,6 @@ interface ViewModel {
         report_title: string;
         period_label: string;
         generated_label: string;
-        version: number;
-        assessment_status: string;
-        is_provisional: boolean;
-        baseline_status: string;
     };
     executive_summary: {
         situation: string;
@@ -110,18 +106,13 @@ interface ViewModel {
         callouts: string[];
     };
     recommendations: RecommendationRow[];
-    methodology: {
-        strategy_label: string;
-        status_label: string;
+    calculation: {
+        summary: string;
+        estimate_note: string;
         coverage_note: string;
         price_source: string;
         assumptions: Array<[string, string]>;
         exclusions: string[];
-    };
-    appendix: {
-        glossary: Array<[string, string]>;
-        version_history: string;
-        contact_email: string;
     };
 }
 
@@ -314,7 +305,7 @@ function DailyTrend({
 
 /**
  * Mirrors the Next.js app's src/app/(portal)/dashboard/reports/
- * [assessmentId]/page.tsx — same 10 sections, same view-model
+ * [assessmentId]/page.tsx — same customer report sections, same view-model
  * (App\Domain\Billing\Reports\SavingsReportViewModelBuilder produces both
  * this page's props and the PDF's data), simplified chart rendering (CSS
  * bars/heatmap rather than hand-tuned SVG) since the customer-visible
@@ -339,7 +330,7 @@ export default function ReportDetail({
 
             <div className="mb-4 flex items-center justify-between">
                 <div className="text-text-secondary text-xs">
-                    {vm.cover.generated_label} · Version {vm.cover.version}
+                    {vm.cover.generated_label}
                 </div>
                 <a
                     href={`${base}/reports/${assessmentId}/pdf`}
@@ -616,43 +607,33 @@ export default function ReportDetail({
                 </SectionCard>
             )}
 
-            <SectionCard title="Methodology">
+            <SectionCard title="How this recommendation was calculated">
+                <p className="text-text-secondary mb-2 text-sm">
+                    {vm.calculation.summary}
+                </p>
+                <p className="text-text-secondary mb-4 text-xs">
+                    {vm.calculation.estimate_note}
+                </p>
                 <table className="w-full text-left text-sm">
                     <tbody>
-                        <tr className="border-border border-b">
-                            <th className="text-text-secondary w-40 py-1.5 text-xs font-medium">
-                                Strategy
-                            </th>
-                            <td className="py-1.5">
-                                {vm.methodology.strategy_label}
-                            </td>
-                        </tr>
-                        <tr className="border-border border-b">
-                            <th className="text-text-secondary py-1.5 text-xs font-medium">
-                                Status
-                            </th>
-                            <td className="py-1.5">
-                                {vm.methodology.status_label}
-                            </td>
-                        </tr>
                         <tr>
                             <th className="text-text-secondary py-1.5 text-xs font-medium">
-                                Coverage
+                                Data coverage
                             </th>
                             <td className="py-1.5">
-                                {vm.methodology.coverage_note}
+                                {vm.calculation.coverage_note}
                             </td>
                         </tr>
                     </tbody>
                 </table>
-                {vm.methodology.assumptions.length > 0 && (
+                {vm.calculation.assumptions.length > 0 && (
                     <>
                         <h3 className="text-primary mt-4 mb-1 text-xs font-semibold">
-                            Assumptions
+                            Information used
                         </h3>
                         <table className="w-full text-left text-sm">
                             <tbody>
-                                {vm.methodology.assumptions.map(
+                                {vm.calculation.assumptions.map(
                                     ([label, value]) => (
                                         <tr
                                             key={label}
@@ -670,37 +651,13 @@ export default function ReportDetail({
                     </>
                 )}
                 <h3 className="text-primary mt-4 mb-1 text-xs font-semibold">
-                    Exclusions
+                    Not included
                 </h3>
                 <ul className="text-text-secondary list-disc pl-4 text-xs">
-                    {vm.methodology.exclusions.map((e, i) => (
+                    {vm.calculation.exclusions.map((e, i) => (
                         <li key={i}>{e}</li>
                     ))}
                 </ul>
-            </SectionCard>
-
-            <SectionCard title="Appendix">
-                <table className="w-full text-left text-sm">
-                    <tbody>
-                        {vm.appendix.glossary.map(([term, definition]) => (
-                            <tr
-                                key={term}
-                                className="border-border border-b last:border-0"
-                            >
-                                <th className="text-text-secondary w-40 py-1.5 align-top text-xs font-medium">
-                                    {term}
-                                </th>
-                                <td className="py-1.5 text-xs">{definition}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                <p className="text-text-secondary mt-3 text-xs">
-                    {vm.appendix.version_history}
-                </p>
-                <p className="text-text-secondary text-xs">
-                    Questions? Contact {vm.appendix.contact_email}
-                </p>
             </SectionCard>
         </>
     );

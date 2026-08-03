@@ -1,6 +1,5 @@
 <?php
 
-use App\Domain\Billing\Enums\BaselineStatus;
 use App\Domain\Billing\Models\Baseline;
 use App\Domain\Billing\Models\SavingsAssessment;
 use App\Domain\Billing\Reports\Money;
@@ -72,15 +71,13 @@ test('the loader and view-model builder compute a coherent report for a real ass
     $vm = SavingsReportViewModelBuilder::build($data);
 
     expect($vm['cover']['organization_name'])->toBe('Acme Oy');
-    expect($vm['cover']['baseline_status'])->toBe(BaselineStatus::Locked->value);
     expect($vm['savings']['waterfall'][0]['cumulative_cents'])->toBe(200_000);
     expect($vm['savings']['waterfall'][2]['cumulative_cents'])->toBe(180_000);
     expect($vm['savings']['table'][2])->toBe(['Total projected savings', Money::formatEurCents(200_000)]);
     expect($vm['baseline']['avg_load_profile'])->toHaveCount(24);
     expect($vm['market']['heatmap'])->toHaveCount(24);
-    expect($vm['methodology']['assumptions'])->toBe([['Share of load assumed shiftable', '30,0%']]);
+    expect($vm['calculation']['assumptions'])->toBe([['Share of load assumed shiftable', '30,0%']]);
     expect($vm['customer_overview']['metering_points'][0]['label'])->toBe('Main meter');
-    expect($vm['appendix']['glossary'])->toHaveCount(8);
 });
 
 /*
@@ -218,7 +215,7 @@ test('an assessment with a confirmed eligible schedule block shows full-confiden
     $vm = SavingsReportViewModelBuilder::build($data);
 
     expect($vm['executive_summary']['production_profile_confirmed'])->toBeTrue();
-    expect($vm['executive_summary']['confidence_note'])->toBeNull();
+    expect($vm['executive_summary']['confidence_note'])->toBe('Estimates are based on the information provided and should be validated before operational changes are made.');
     $annualSavingsKpi = collect($vm['executive_summary']['kpis'])->firstWhere('label', 'Annual savings');
     expect($annualSavingsKpi)->not->toBeNull();
     expect($annualSavingsKpi['tone'])->toBe('cheap');
@@ -244,7 +241,7 @@ test('the executive summary always states its assumptions and uses Finnish decim
     $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
     $vm = SavingsReportViewModelBuilder::build($data);
 
-    expect($vm['executive_summary']['confidence_note'])->toBeNull();
+    expect($vm['executive_summary']['confidence_note'])->toBe('Estimates are based on the information provided and should be validated before operational changes are made.');
     expect($vm['executive_summary']['assumption_summary'])
         ->toBe('Estimate assumes 30% of load can move to the 3 cheapest hours each day.');
     expect(collect($vm['executive_summary']['kpis'])->firstWhere('label', 'Avg. cost reduction')['value'])
@@ -264,4 +261,43 @@ test('production_profile reads from the pilot application win_condition when pre
     $vm = SavingsReportViewModelBuilder::build($data);
 
     expect($vm['customer_overview']['production_profile'])->toBe('Cut peak-hour freezer costs by 20%.');
+});
+
+test('the customer report view model replaces legacy internal methodology labels, including saved snapshots', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    $baseline = Baseline::factory()->for($organization, 'organization')->create();
+    $assessment = SavingsAssessment::factory()->for($organization, 'organization')->for($baseline)->create([
+        'report_snapshot' => [
+            'cover' => [
+                'generated_label' => '01/08/2026 · Methodology provisional-heuristic-v1',
+                'version' => 1,
+                'is_provisional' => true,
+            ],
+            'executive_summary' => [
+                'confidence_badge' => 'Provisional · limited day sample · not yet verified',
+                'status_note' => 'This is a provisional estimate.',
+            ],
+            'methodology' => [
+                'strategy_label' => 'provisional-heuristic-v1',
+                'status_label' => 'Provisional — not yet through methodology review',
+                'coverage_note' => '120 hourly readings',
+                'assumptions' => [],
+                'exclusions' => [],
+            ],
+            'appendix' => ['version_history' => 'Version 1'],
+        ],
+    ]);
+
+    $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
+    $vm = app(SavingsReportLoader::class)->viewModel($data);
+    $customerCopy = json_encode($vm, JSON_THROW_ON_ERROR);
+
+    expect($customerCopy)->not->toContain('provisional');
+    expect($customerCopy)->not->toContain('heuristic');
+    expect($customerCopy)->not->toContain('Methodology');
+    expect($vm['calculation']['summary'])->toBe('Based on your uploaded schedule, estimated energy use, and hourly electricity prices.');
+    expect($vm['calculation']['estimate_note'])->toBe('Estimates are based on the information provided and should be validated before operational changes are made.');
+    expect($vm)->not->toHaveKey('methodology');
+    expect($vm)->not->toHaveKey('appendix');
 });

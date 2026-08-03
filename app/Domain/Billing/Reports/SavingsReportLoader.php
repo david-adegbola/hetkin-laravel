@@ -47,7 +47,9 @@ class SavingsReportLoader
     {
         $snapshot = $data->assessment->getAttribute('report_snapshot');
 
-        return is_array($snapshot) ? $snapshot : SavingsReportViewModelBuilder::build($data);
+        return CustomerSavingsReportCopy::present(
+            is_array($snapshot) ? $snapshot : SavingsReportViewModelBuilder::build($data),
+        );
     }
 
     public function load(string $assessmentId, string $organizationId): ?SavingsReportData

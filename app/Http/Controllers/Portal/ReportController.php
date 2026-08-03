@@ -17,9 +17,11 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Throwable;
 
 /**
  * Mirrors the Next.js app's src/app/(portal)/dashboard/reports/{page.tsx,
@@ -48,7 +50,7 @@ class ReportController extends Controller
                 'id' => $a->id,
                 'generated_at' => $a->generated_at->toIso8601String(),
                 'status' => $a->status->value,
-                'provisional' => $a->baseline->status->value !== 'LOCKED'
+                'isEstimate' => $a->baseline->status->value !== 'LOCKED'
                     || str_starts_with($a->baseline->methodology_version, 'provisional-'),
                 'current_annual_cost_cents' => $a->current_annual_cost_cents,
                 'optimized_annual_cost_cents' => $a->optimized_annual_cost_cents,
@@ -73,6 +75,16 @@ class ReportController extends Controller
             $action->execute($currentOrganization->get(), $user);
         } catch (BillingActionException $e) {
             return back()->withErrors(['assessment' => $e->getMessage()]);
+        } catch (Throwable $e) {
+            Log::error('[portal/reports] savings assessment generation failed', [
+                'organization_id' => $currentOrganization->get()->id,
+                'user_id' => $user->id,
+                'exception' => $e,
+            ]);
+
+            return back()->withErrors([
+                'assessment' => 'We could not generate the savings assessment. Please try again shortly.',
+            ]);
         }
 
         return back()->with('status', 'assessment-generated');

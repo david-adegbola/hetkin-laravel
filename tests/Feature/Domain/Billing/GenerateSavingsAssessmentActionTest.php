@@ -1,5 +1,6 @@
 <?php
 
+use App\Domain\Alerts\Actions\CreateAlertAction;
 use App\Domain\Alerts\Enums\AlertType;
 use App\Domain\Alerts\Models\Alert;
 use App\Domain\Audit\Models\AuditLogEntry;
@@ -214,4 +215,19 @@ test('creates a REPORT_READY alert unconditionally on a successful generation', 
     expect($alert)->not->toBeNull();
     expect($alert->type)->toBe(AlertType::ReportReady);
     expect($alert->title)->toBe('Your savings assessment is ready');
+});
+
+test('keeps a generated assessment available when its report-ready alert cannot be created', function () {
+    $organization = Organization::factory()->create();
+    $user = User::factory()->create();
+    seedFlatSavingsWeek($organization, 100, 50);
+
+    $alerts = Mockery::mock(CreateAlertAction::class);
+    $alerts->shouldReceive('execute')->once()->andThrow(new RuntimeException('Alerts unavailable'));
+    app()->instance(CreateAlertAction::class, $alerts);
+
+    $assessment = app(GenerateSavingsAssessmentAction::class)->execute($organization, $user);
+
+    expect($assessment->exists)->toBeTrue();
+    expect($assessment->report_snapshot)->toBeArray();
 });

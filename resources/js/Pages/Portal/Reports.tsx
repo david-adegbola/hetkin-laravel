@@ -13,7 +13,7 @@ interface AssessmentRow {
     id: string;
     generated_at: string;
     status: string;
-    provisional: boolean;
+    isEstimate: boolean;
     current_annual_cost_cents: number;
     optimized_annual_cost_cents: number;
     net_customer_savings_cents: number;
@@ -88,10 +88,8 @@ export default function Reports({
                 {assessments.length === 0 ? (
                     <Card className="text-text-secondary py-8 text-center text-sm">
                         Generate your first savings assessment once you've
-                        uploaded meter data and price data covers the same
-                        period. Every figure will read "Estimated" until the
-                        baseline methodology has been through legal review and
-                        is locked by an admin.
+                        uploaded meter data and hourly electricity prices cover
+                        the same period.
                     </Card>
                 ) : (
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -105,12 +103,10 @@ export default function Reports({
                                         · {a.status.toLowerCase()}
                                     </div>
                                     <Badge
-                                        variant={
-                                            a.provisional ? 'mid' : 'cheap'
-                                        }
+                                        variant={a.isEstimate ? 'mid' : 'cheap'}
                                         showGlyph={false}
                                     >
-                                        {a.provisional
+                                        {a.isEstimate
                                             ? 'Estimated'
                                             : 'Verified baseline'}
                                     </Badge>
@@ -121,7 +117,7 @@ export default function Reports({
                                     )}
                                 </div>
                                 <div className="text-text-secondary text-xs">
-                                    {a.provisional
+                                    {a.isEstimate
                                         ? 'Estimated net customer savings'
                                         : 'Net customer savings'}
                                 </div>
@@ -154,6 +150,19 @@ export default function Reports({
                         ))}
                     </div>
                 )}
+                <Card className="text-text-secondary mt-4 text-sm">
+                    <h4 className="text-primary mb-1 font-medium">
+                        How this recommendation was calculated
+                    </h4>
+                    <p>
+                        Based on your uploaded schedule, estimated energy use,
+                        and hourly electricity prices.
+                    </p>
+                    <p className="mt-1 text-xs">
+                        Estimates are based on the information provided and
+                        should be validated before operational changes are made.
+                    </p>
+                </Card>
             </div>
 
             <div>

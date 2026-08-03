@@ -27,6 +27,8 @@ test('the reports page lists assessments and verifications', function () {
     $response->assertInertia(fn ($page) => $page
         ->component('Portal/Reports')
         ->has('assessments', 1)
+        ->where('assessments.0.isEstimate', true)
+        ->missing('assessments.0.provisional')
         ->has('verifications', 1));
 });
 
@@ -89,7 +91,11 @@ test('the report detail page renders the view-model for the customer\'s own asse
     $response->assertInertia(fn ($page) => $page
         ->component('Portal/ReportDetail')
         ->has('vm.cover')
-        ->has('vm.savings'));
+        ->has('vm.savings')
+        ->where('vm.calculation.summary', 'Based on your uploaded schedule, estimated energy use, and hourly electricity prices.')
+        ->where('vm.calculation.estimate_note', 'Estimates are based on the information provided and should be validated before operational changes are made.')
+        ->missing('vm.methodology')
+        ->missing('vm.appendix'));
 });
 
 test('downloading the PDF streams a PDF and writes an audit log entry', function () {

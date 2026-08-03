@@ -28,6 +28,8 @@ use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Models\ElectricityPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Ports the Next.js app's generateSavingsAssessment() Server Action exactly
@@ -175,13 +177,25 @@ class GenerateSavingsAssessmentAction
                 'isProvisional' => $result->isProvisional,
             ]);
 
-            $this->createAlertAction->execute(
-                $organization->id,
-                AlertType::ReportReady,
-                AlertSeverity::Info,
-                'Your savings assessment is ready',
-                'Estimated annual savings: '.Money::formatEurCents($result->estimatedAnnualSavingsCents).'. Download the PDF or review the full breakdown on the Reports page.',
-            );
+            // The assessment is already committed at this point. An optional
+            // portal alert must not turn a successfully generated report into
+            // a 500 response if the alerts table or notification subsystem is
+            // temporarily unavailable.
+            try {
+                $this->createAlertAction->execute(
+                    $organization->id,
+                    AlertType::ReportReady,
+                    AlertSeverity::Info,
+                    'Your savings assessment is ready',
+                    'Estimated annual savings: '.Money::formatEurCents($result->estimatedAnnualSavingsCents).'. Download the PDF or review the full breakdown on the Reports page.',
+                );
+            } catch (Throwable $e) {
+                Log::error('[billing] savings assessment generated but report-ready alert could not be created', [
+                    'assessment_id' => $assessment->id,
+                    'organization_id' => $organization->id,
+                    'exception' => $e,
+                ]);
+            }
 
             return $assessment;
         } finally {

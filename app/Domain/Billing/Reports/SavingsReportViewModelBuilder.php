@@ -27,17 +27,6 @@ class SavingsReportViewModelBuilder
 {
     private const DISPLAY_TIMEZONE = 'Europe/Helsinki';
 
-    private const GLOSSARY = [
-        ['Baseline', 'The reference annual electricity cost this assessment compares an optimized schedule against.'],
-        ['Provisional', "Not yet through Hetkin's methodology/legal review — treat the figure as an estimate, not final."],
-        ['Locked baseline', 'A baseline whose cost/assumption fields are frozen and used for ongoing monthly verification.'],
-        ['Bidding zone', 'The regional electricity market Hetkin sources day-ahead prices for (FI = Finland).'],
-        ['Day-ahead price', 'The spot price for electricity delivered the following day, set by the Nord Pool/ENTSO-E auction.'],
-        ['Net customer savings', "Estimated annual savings after Hetkin's revenue-share fee is deducted."],
-        ['Delivery risk', 'The operational disruption risk of moving this production block. Low means a small timing change; medium means a material rescheduling effort; high means a large same-day shift that needs closer production review.'],
-        ['Negative electricity price', 'A real market condition: when supply, such as wind or hydro, exceeds demand, producers may effectively pay consumers to use electricity.'],
-    ];
-
     /**
      * @return array<string, mixed>
      */
@@ -70,7 +59,7 @@ class SavingsReportViewModelBuilder
         $hasRecommendations = $data->recommendations->isNotEmpty();
 
         $periodLabel = self::formatDateRange($assessment->period_start, $assessment->period_end);
-        $generatedLabel = Carbon::parse($assessment->generated_at, 'UTC')->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y')." · Methodology {$baseline->methodology_version}";
+        $generatedLabel = Carbon::parse($assessment->generated_at, 'UTC')->timezone(self::DISPLAY_TIMEZONE)->format('d/m/Y');
 
         $avgLoadProfile = self::buildAvgLoadProfile($data->readings);
         [$heatmap, $trend, $minPrice, $maxPrice] = self::buildMarket($data->prices);
@@ -142,7 +131,7 @@ class SavingsReportViewModelBuilder
         $flexPct = (float) ($rawAssumptions['flexPct'] ?? 0.3);
         $cheapHours = (int) ($rawAssumptions['cheapHoursPerDay'] ?? 3);
         $exclusions = [
-            'Grid connection fees and taxes, unless explicitly listed in Assumptions below',
+            'Grid connection fees and taxes, unless explicitly listed in Information used above',
             'Equipment ramp-up/ramp-down energy draw not separately metered',
             "Demand (capacity) charges, if applicable to this customer's electricity contract",
             'Non-electricity operating costs',
@@ -152,7 +141,6 @@ class SavingsReportViewModelBuilder
             ? (int) round($assessment->period_start->diffInSeconds($assessment->period_end) / 3600) + 1
             : null;
 
-        $isProvisional = $assessment->is_provisional;
         // Never presented with full confidence (a 'cheap'/positive tone,
         // an unqualified label) unless a real production profile backs
         // the number — see $productionProfileConfirmed's own comment.
@@ -178,8 +166,6 @@ class SavingsReportViewModelBuilder
                 'generated_label' => $generatedLabel,
                 'version' => $data->versionNumber,
                 'assessment_status' => $assessment->status->value,
-                'is_provisional' => $isProvisional,
-                'baseline_status' => $baseline->status->value,
             ],
             'executive_summary' => [
                 'situation' => "{$organization->name}'s production schedule currently runs against the electricity spot market rather than with it.",
@@ -187,18 +173,12 @@ class SavingsReportViewModelBuilder
                 'waterfall_thumbnail' => $waterfall,
                 'fee_configured' => $feeConfigured,
                 'production_profile_confirmed' => $productionProfileConfirmed,
-                'confidence_badge' => $isProvisional
-                    ? 'Provisional · '.($assessment->sample_day_count ?? 'limited').' day sample · not yet verified'
-                    : null,
-                'confidence_note' => $productionProfileConfirmed
-                    ? null
-                    : 'The figures above assume '.self::formatDecimal($flexPct * 100, 0).'% of load is shiftable to the '.$cheapHours.' cheapest hours per day — a working estimate, not yet confirmed against '.$organization->name."'s actual production schedule. Add a production schedule with at least one Unmanned block and an estimated energy use to move this from illustrative to confirmed.",
+                'confidence_badge' => null,
+                'confidence_note' => CustomerSavingsReportCopy::ESTIMATE_NOTE,
                 'assumption_summary' => 'Estimate assumes '.self::formatDecimal($flexPct * 100, 0).'% of load can move to the '.$cheapHours.' cheapest hours each day'.($productionProfileConfirmed ? '.' : '; this is not yet confirmed against your production schedule.'),
                 'key_recommendations' => collect($recommendationRows)->take(3)->pluck('title')->values()->all(),
                 'roi_label' => $roiLabel,
-                'status_note' => $isProvisional
-                    ? 'This is a provisional estimate based on '.($assessment->sample_day_count ?? 'an unspecified number of').' days of metered data. It has not yet been through Hetkin\'s methodology review — see Methodology, below.'
-                    : null,
+                'status_note' => null,
                 'next_steps' => $hasRecommendations
                     ? [
                         'Review the recommended schedule changes with production leadership (see Production Schedule Optimization).',
@@ -295,20 +275,15 @@ class SavingsReportViewModelBuilder
                     : ['No schedule recommendations available yet — run the optimization engine against an active production schedule.'],
             ],
             'recommendations' => $recommendationRows,
-            'methodology' => [
-                'strategy_label' => $baseline->methodology_version,
-                'status_label' => $isProvisional ? 'Provisional — not yet through methodology review' : 'Reviewed',
+            'calculation' => [
+                'summary' => CustomerSavingsReportCopy::CALCULATION_SUMMARY,
+                'estimate_note' => CustomerSavingsReportCopy::ESTIMATE_NOTE,
                 'coverage_note' => $expectedHours !== null
                     ? self::formatDecimal((float) $coveredHours, 0).' of '.self::formatDecimal((float) $expectedHours, 0).' expected hourly readings ('.self::formatDecimal(round($coveredHours / $expectedHours * 100), 0).'% coverage)'
                     : self::formatDecimal((float) $coveredHours, 0).' hourly readings',
                 'price_source' => 'ENTSO-E Transparency Platform, day-ahead auction, Finland (FI) bidding zone',
                 'assumptions' => $assumptions,
                 'exclusions' => $exclusions,
-            ],
-            'appendix' => [
-                'glossary' => self::GLOSSARY,
-                'version_history' => "This is version {$data->versionNumber} of the savings assessment generated for {$organization->name}.",
-                'contact_email' => 'hello@hetkin.app',
             ],
         ];
     }

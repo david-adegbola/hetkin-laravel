@@ -195,7 +195,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
-			count: 3
+			count: 2
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-

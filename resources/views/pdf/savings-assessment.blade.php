@@ -57,7 +57,7 @@
 <div class="page-header">Hetkin Oy</div>
 
 <div class="page-footer">
-    Hetkin Oy &middot; {{ $vm['cover']['organization_name'] }} &middot; Confidential &middot; Page {PAGE_NUM} of {PAGE_COUNT} &middot; v{{ $vm['cover']['version'] }}
+    Hetkin Oy &middot; {{ $vm['cover']['organization_name'] }} &middot; Confidential &middot; Page {PAGE_NUM} of {PAGE_COUNT}
 </div>
 
 {{-- Cover --}}
@@ -66,10 +66,6 @@
     <p style="font-size: 16px;">{{ $vm['cover']['organization_name'] }}</p>
     <p class="muted">{{ $vm['cover']['period_label'] }}</p>
     <p class="muted">{{ $vm['cover']['generated_label'] }}</p>
-    <p class="muted">Version {{ $vm['cover']['version'] }}</p>
-    @if ($vm['cover']['is_provisional'])
-        <p><span class="badge badge-mid">Provisional estimate</span></p>
-    @endif
 </div>
 
 {{-- Executive summary --}}
@@ -288,49 +284,33 @@
     </table>
 </div>
 
-{{-- Methodology --}}
+{{-- Customer calculation explanation --}}
 <div class="section">
-    <h2>Methodology</h2>
+    <h2>How this recommendation was calculated</h2>
+    <p>{{ $vm['calculation']['summary'] }}</p>
+    <p class="muted">{{ $vm['calculation']['estimate_note'] }}</p>
     <table>
-        <tr><th>Strategy</th><td>{{ $vm['methodology']['strategy_label'] }}</td></tr>
-        <tr><th>Status</th><td>{{ $vm['methodology']['status_label'] }}</td></tr>
-        <tr><th>Coverage</th><td>{{ $vm['methodology']['coverage_note'] }}</td></tr>
-        <tr><th>Price source</th><td>{{ $vm['methodology']['price_source'] }}</td></tr>
+        <tr><th>Data coverage</th><td>{{ $vm['calculation']['coverage_note'] }}</td></tr>
+        <tr><th>Price source</th><td>{{ $vm['calculation']['price_source'] }}</td></tr>
     </table>
 
-    @if (count($vm['methodology']['assumptions']) > 0)
-        <h3>Assumptions</h3>
+    @if (count($vm['calculation']['assumptions']) > 0)
+        <h3>Information used</h3>
         <table>
             <tbody>
-                @foreach ($vm['methodology']['assumptions'] as [$label, $value])
+                @foreach ($vm['calculation']['assumptions'] as [$label, $value])
                     <tr><th>{{ $label }}</th><td>{{ $value }}</td></tr>
                 @endforeach
             </tbody>
         </table>
     @endif
 
-    <h3>Exclusions</h3>
+    <h3>Not included</h3>
     <ul>
-        @foreach ($vm['methodology']['exclusions'] as $exclusion)
+        @foreach ($vm['calculation']['exclusions'] as $exclusion)
             <li>{{ $exclusion }}</li>
         @endforeach
     </ul>
-</div>
-
-{{-- Appendix --}}
-<div class="section">
-    <h2>Appendix</h2>
-    <h3>Glossary</h3>
-    <table>
-        <tbody>
-            @foreach ($vm['appendix']['glossary'] as [$term, $definition])
-                <tr><th style="width: 25%;">{{ $term }}</th><td>{{ $definition }}</td></tr>
-            @endforeach
-        </tbody>
-    </table>
-
-    <p class="muted">{{ $vm['appendix']['version_history'] }}</p>
-    <p class="muted">Questions? Contact {{ $vm['appendix']['contact_email'] }}</p>
 </div>
 
 </body>
