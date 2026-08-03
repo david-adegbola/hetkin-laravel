@@ -55,7 +55,9 @@ class ReportController extends Controller
                     || str_starts_with($a->baseline->methodology_version, 'provisional-'),
                 'current_annual_cost_cents' => $a->current_annual_cost_cents,
                 'optimized_annual_cost_cents' => $a->optimized_annual_cost_cents,
+                'estimated_annual_savings_cents' => $a->estimated_annual_savings_cents,
                 'net_customer_savings_cents' => $a->net_customer_savings_cents,
+                'fee_configured' => $organization->revenue_share_percent !== null,
             ]),
             'verifications' => $verifications->map(fn (VerificationRecord $v) => [
                 'id' => $v->id,

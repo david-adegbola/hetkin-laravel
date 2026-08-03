@@ -22,6 +22,8 @@ use App\Domain\Billing\Models\SavingsAssessment;
 use App\Domain\Billing\Reports\Money;
 use App\Domain\Billing\Reports\SavingsReportLoader;
 use App\Domain\Metering\Models\MeterReading;
+use App\Domain\Optimization\Enums\OptimizationStatus;
+use App\Domain\Optimization\Models\OptimizationRun;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
 use App\Domain\Pricing\Enums\BiddingZone;
@@ -114,8 +116,18 @@ class GenerateSavingsAssessmentAction
                 ? ((float) $organization->revenue_share_percent) / 100
                 : 0.0;
             $hetkinShareCents = (int) round($result->estimatedAnnualSavingsCents * $revenueShareFraction);
+            /**
+             * Snapshot the latest completed run now, not when the report is
+             * later opened. A report may only describe recommendations whose
+             * timings and savings came from this exact run.
+             */
+            $optimizationRun = OptimizationRun::query()
+                ->where('organization_id', $organization->id)
+                ->where('status', OptimizationStatus::Completed)
+                ->orderByDesc('completed_at')
+                ->first();
             $assessment = DB::transaction(function () use (
-                $organization, $user, $result, $hetkinShareCents, $firstHour, $lastHour,
+                $organization, $user, $result, $hetkinShareCents, $firstHour, $lastHour, $optimizationRun,
             ) {
                 $baseline = Baseline::create([
                     'organization_id' => $organization->id,
@@ -128,6 +140,7 @@ class GenerateSavingsAssessmentAction
                 $assessment = SavingsAssessment::create([
                     'organization_id' => $organization->id,
                     'baseline_id' => $baseline->id,
+                    'optimization_run_id' => $optimizationRun?->id,
                     'status' => SavingsAssessmentStatus::Draft,
                     'current_annual_cost_cents' => $result->currentAnnualCostCents,
                     'optimized_annual_cost_cents' => $result->optimizedAnnualCostCents,

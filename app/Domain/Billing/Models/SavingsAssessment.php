@@ -3,6 +3,7 @@
 namespace App\Domain\Billing\Models;
 
 use App\Domain\Billing\Enums\SavingsAssessmentStatus;
+use App\Domain\Optimization\Models\OptimizationRun;
 use App\Domain\Organizations\Concerns\BelongsToOrganization;
 use Database\Factories\SavingsAssessmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * No `updated_at` — see the creating migration's comment.
  */
 #[Fillable([
-    'organization_id', 'baseline_id', 'status', 'current_annual_cost_cents',
+    'organization_id', 'baseline_id', 'optimization_run_id', 'status', 'current_annual_cost_cents',
     'optimized_annual_cost_cents', 'estimated_annual_savings_cents',
     'hetkin_share_cents', 'net_customer_savings_cents', 'is_provisional',
     'sample_day_count', 'period_start', 'period_end', 'report_pdf_url',
@@ -72,5 +73,11 @@ class SavingsAssessment extends Model
     public function baseline(): BelongsTo
     {
         return $this->belongsTo(Baseline::class);
+    }
+
+    /** @return BelongsTo<OptimizationRun, $this> */
+    public function optimizationRun(): BelongsTo
+    {
+        return $this->belongsTo(OptimizationRun::class);
     }
 }

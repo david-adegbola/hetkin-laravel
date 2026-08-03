@@ -16,7 +16,9 @@ interface AssessmentRow {
     isEstimate: boolean;
     current_annual_cost_cents: number;
     optimized_annual_cost_cents: number;
+    estimated_annual_savings_cents: number;
     net_customer_savings_cents: number;
+    fee_configured: boolean;
 }
 
 interface VerificationRow {
@@ -113,13 +115,19 @@ export default function Reports({
                                 </div>
                                 <div className="font-display text-success text-xl font-bold tabular-nums">
                                     {formatEurCents(
-                                        a.net_customer_savings_cents,
+                                        a.fee_configured
+                                            ? a.net_customer_savings_cents
+                                            : a.estimated_annual_savings_cents,
                                     )}
                                 </div>
                                 <div className="text-text-secondary text-xs">
                                     {a.isEstimate
-                                        ? 'Estimated net customer savings'
-                                        : 'Net customer savings'}
+                                        ? a.fee_configured
+                                            ? 'Estimated annual net saving'
+                                            : 'Estimated annual energy-price saving'
+                                        : a.fee_configured
+                                          ? 'Annual net saving'
+                                          : 'Annual energy-price saving'}
                                 </div>
                                 <div className="text-text-secondary mt-2 text-xs">
                                     Baseline:{' '}

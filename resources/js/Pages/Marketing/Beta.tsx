@@ -31,7 +31,7 @@ const PORTAL_SECTIONS = [
     },
     {
         name: 'Schedule',
-        body: 'Where you enter production runs. Fill in an asset/line name, start and end time, estimated energy use in kWh, and whether the block runs unmanned or needs someone on shift — this part matters — only unmanned blocks with a kWh figure get considered for optimization. Add a few blocks, then click “Run optimization” to see if a cheaper time window exists for any of them.',
+        body: 'Where you enter production runs. Fill in an asset or line name, start and end time, estimated energy use in kWh, and whether the activity can move without changing staffed production. Only reschedulable activities with a kWh figure are considered for timing recommendations. Add a few blocks, then click “Run optimization” to see if a lower-cost time window exists.',
     },
     {
         name: 'Data',
@@ -39,7 +39,7 @@ const PORTAL_SECTIONS = [
     },
     {
         name: 'Reports',
-        body: "Once you've generated a savings assessment, view or download the full report here — baseline, price analysis, recommendations, savings, methodology.",
+        body: "Once you've generated a savings assessment, view or download the decision report here — estimated energy-price savings, recommended timing changes and what to confirm before acting.",
     },
     {
         name: 'Billing',
@@ -65,7 +65,7 @@ const TEST_CHECKLIST = [
 
 const KNOWN_LIMITATIONS = [
     'Recommendations only ever shift a block within the same day, and only appear if the cheaper option is at least 5% cheaper and saves at least €1 — small or multi-day cases won’t produce anything, on purpose.',
-    'Every savings figure is labeled “Estimated” or “Provisional” — nothing is “Verified” yet during the pilot.',
+    'Every savings figure is clearly labeled as an estimate until it has been verified against a completed billing period.',
     'No bulk import — schedule blocks are entered one at a time by hand for now.',
     'No live Fingrid connection — CSV upload is the only way to get data in right now.',
     "The Team page shows roles, but there's no in-app way to invite a new teammate yourself — that's still done by us directly.",

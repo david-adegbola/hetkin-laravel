@@ -9,7 +9,6 @@ use App\Domain\Optimization\Enums\OptimizationStatus;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Models\ElectricityPrice;
-use App\Domain\Scheduling\Models\ProductionSchedule;
 use Illuminate\Support\Collection;
 
 /**
@@ -58,7 +57,7 @@ class SavingsReportLoader
         $assessment = SavingsAssessment::query()
             ->where('id', $assessmentId)
             ->where('organization_id', $organizationId)
-            ->with(['baseline', 'organization.pilotApplication'])
+            ->with(['baseline', 'organization.pilotApplication', 'optimizationRun.schedule'])
             ->first();
 
         if (! $assessment) {
@@ -89,26 +88,16 @@ class SavingsReportLoader
                 ->get();
         }
 
-        // "Current" schedule for the schedule-optimization section: the
-        // org's most recently created ProductionSchedule — not tied 1:1 to
-        // this specific assessment's period (no such link exists in the
-        // schema), a known simplification carried over from v2.
-        /** @var ProductionSchedule|null $latestSchedule */
-        $latestSchedule = ProductionSchedule::query()
-            ->where('organization_id', $organizationId)
-            ->orderByDesc('version')
-            ->with(['blocks' => fn ($q) => $q->orderBy('start_at')])
-            ->with(['optimizationRuns' => fn ($q) => $q->where('status', OptimizationStatus::Completed)
-                ->orderByDesc('completed_at')
-                ->limit(1)])
-            ->first();
-
+        // Customer recommendations are only shown when the assessment is
+        // explicitly bound to the completed run that produced them. Legacy
+        // assessments lack that historical link, so showing the latest run
+        // would be misleading rather than helpful.
         $recommendations = new Collection;
-        $latestRun = $latestSchedule?->optimizationRuns->first();
-        if ($latestRun) {
+        $optimizationRun = $assessment->optimizationRun;
+        if ($optimizationRun && $this->isCompletedRun($optimizationRun->status)) {
             $recommendations = Recommendation::query()
-                ->where('optimization_run_id', $latestRun->id)
-                ->with('scheduleBlock')
+                ->where('optimization_run_id', $optimizationRun->id)
+                ->with(['scheduleBlock', 'decision'])
                 ->orderByDesc('projected_savings_cents')
                 ->get();
         }
@@ -129,9 +118,16 @@ class SavingsReportLoader
             meteringPoints: $meteringPoints,
             readings: $readings,
             prices: $prices,
-            scheduleBlocks: $latestSchedule->blocks ?? new Collection,
+            scheduleBlocks: new Collection,
             recommendations: $recommendations,
             versionNumber: $versionNumber,
         );
+    }
+
+    private function isCompletedRun(OptimizationStatus|string|null $status): bool
+    {
+        return $status instanceof OptimizationStatus
+            ? $status === OptimizationStatus::Completed
+            : $status === OptimizationStatus::Completed->value;
     }
 }

@@ -21,11 +21,11 @@ interface ScheduleBlockRow {
 function LabourClassificationBadge({ value }: { value: LabourClassification }) {
     return value === 'UNMANNED' ? (
         <Badge variant="navy" showGlyph={false}>
-            Unmanned
+            Reschedulable
         </Badge>
     ) : (
         <Badge variant="mid" showGlyph={false}>
-            Labour Bound
+            Requires staffed production
         </Badge>
     );
 }

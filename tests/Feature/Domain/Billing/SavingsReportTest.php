@@ -8,8 +8,12 @@ use App\Domain\Billing\Reports\SavingsReportViewModelBuilder;
 use App\Domain\Metering\Models\MeteringPoint;
 use App\Domain\Metering\Models\MeterReading;
 use App\Domain\Metering\Models\Site;
+use App\Domain\Optimization\Models\OptimizationRun;
+use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Organizations\CurrentOrganization;
 use App\Domain\Organizations\Models\Organization;
+use App\Domain\Scheduling\Models\ProductionSchedule;
+use App\Domain\Scheduling\Models\ScheduleBlock;
 use Illuminate\Support\Carbon;
 
 test('the loader returns null for an assessment belonging to another organization', function () {
@@ -44,16 +48,14 @@ test('the customer report is a compact energy-price decision report', function (
     $vm = SavingsReportViewModelBuilder::build($data);
 
     expect($vm['cover']['report_title'])->toBe('Acme Oy Savings Assessment');
-    expect($vm['executive_summary']['kpis'])->toContain([
+    expect($vm['opportunity']['kpis'])->toContain([
         'label' => 'Estimated annual energy-price saving',
         'value' => Money::formatEurCents(200_000),
-        'tone' => 'cheap',
     ]);
-    expect($vm['calculation']['data_used'])->toBe('5 days of metered data were used for this estimate.');
-    expect($vm['calculation']['operational_assumption'])
-        ->toBe('The estimate assumes 30% of eligible electricity use can move to the 3 cheapest hours each day.');
-    expect($vm['calculation']['confirmation_note'])->toContain('network tariff and capacity charges');
-    expect($vm)->not->toHaveKeys(['customer_overview', 'baseline', 'market', 'savings', 'schedule']);
+    expect($vm['confidence']['information'])->toContain(['label' => 'Meter data analysed', 'value' => '5 days']);
+    expect($vm['confidence']['confirm_before_action'])->toContain('network tariffs, capacity charges');
+    expect($vm)->toHaveKeys(['opportunity', 'recommendations', 'evidence', 'confidence']);
+    expect($vm)->not->toHaveKeys(['customer_overview', 'baseline', 'market', 'savings', 'schedule', 'methodology']);
 });
 
 test('net saving is only shown when a Hetkin fee is configured', function () {
@@ -68,14 +70,50 @@ test('net saving is only shown when a Hetkin fee is configured', function () {
     $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
     $vm = SavingsReportViewModelBuilder::build($data);
 
-    expect($vm['executive_summary']['kpis'])->toContain([
+    expect($vm['opportunity']['kpis'])->toContain([
         'label' => 'Estimated annual net saving',
         'value' => Money::formatEurCents(80_000),
-        'tone' => 'cheap',
     ]);
 });
 
-test('the customer copy turns legacy snapshots into the compact report and caps recommendations', function () {
+test('a report only shows recommendations from its saved optimization run', function () {
+    $organization = Organization::factory()->create();
+    app(CurrentOrganization::class)->set($organization);
+    $baseline = Baseline::factory()->for($organization, 'organization')->create([
+        'assumptions' => ['annualizeFactor' => 12],
+    ]);
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $block = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+        'asset_label' => 'Cold store',
+        'start_at' => '2026-01-15 08:00:00+00',
+        'end_at' => '2026-01-15 12:00:00+00',
+    ]);
+    $savedRun = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+    $newerRun = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+    Recommendation::factory()->for($savedRun, 'optimizationRun')->for($block, 'scheduleBlock')->create([
+        'projected_savings_cents' => 1_500,
+        'proposed_start_at' => '2026-01-15 20:00:00+00',
+        'proposed_end_at' => '2026-01-15 23:00:00+00',
+    ]);
+    Recommendation::factory()->for($newerRun, 'optimizationRun')->for($block, 'scheduleBlock')->create([
+        'projected_savings_cents' => 99_999,
+    ]);
+    $assessment = SavingsAssessment::factory()->for($organization, 'organization')->for($baseline)->create([
+        'optimization_run_id' => $savedRun->id,
+        'sample_day_count' => 45,
+    ]);
+
+    $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
+    $vm = SavingsReportViewModelBuilder::build($data);
+
+    expect($vm['recommendations']['items'])->toHaveCount(1)
+        ->and($vm['recommendations']['items'][0]['asset'])->toBe('Cold store')
+        ->and($vm['recommendations']['items'][0]['saving_per_occurrence'])->toBe(Money::formatEurCents(1_500).' per occurrence')
+        ->and($vm['recommendations']['items'][0]['annual_contribution'])->toBe(Money::formatEurCents(18_000).' estimated annual contribution');
+});
+
+test('the customer copy turns legacy snapshots into the decision report without unverified recommendations', function () {
     $organization = Organization::factory()->create(['name' => 'Legacy Oy']);
     app(CurrentOrganization::class)->set($organization);
     $baseline = Baseline::factory()->for($organization, 'organization')->create();
@@ -104,9 +142,9 @@ test('the customer copy turns legacy snapshots into the compact report and caps 
     $data = app(SavingsReportLoader::class)->load($assessment->id, $organization->id);
     $vm = app(SavingsReportLoader::class)->viewModel($data);
 
-    expect($vm['recommendations']['items'])->toHaveCount(5);
-    expect($vm['recommendations']['additional_count'])->toBe(2);
-    expect($vm['calculation']['data_used'])->toBe('5 days of metered data were used for this estimate.');
+    expect($vm['recommendations']['items'])->toBe([]);
+    expect($vm['recommendations']['empty_message'])->toContain('cannot be verified');
+    expect($vm['confidence']['information'])->toContain(['label' => 'Meter data analysed', 'value' => '5 days']);
     expect(json_encode($vm, JSON_THROW_ON_ERROR))->not->toMatch('/provisional|heuristic|methodology|coverage|annualization|ENTSO-E/i');
-    expect($vm)->toHaveKeys(['cover', 'executive_summary', 'recommendations', 'calculation']);
+    expect($vm)->toHaveKeys(['cover', 'opportunity', 'recommendations', 'evidence', 'confidence']);
 });

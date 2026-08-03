@@ -92,12 +92,15 @@ test('the report detail page renders the view-model for the customer\'s own asse
     $response->assertInertia(fn ($page) => $page
         ->component('Portal/ReportDetail')
         ->has('vm.cover')
-        ->has('vm.executive_summary.kpis')
-        ->where('vm.calculation.summary', 'Based on your uploaded schedule, estimated energy use, and hourly electricity prices.')
-        ->where('vm.calculation.estimate_note', 'Estimates are based on the information provided and should be validated before operational changes are made.')
-        ->where('vm.calculation.confirmation_note', 'Before making schedule changes, confirm that the proposed timing works for production and check how your network tariff and capacity charges apply.')
+        ->has('vm.opportunity.kpis')
+        ->has('vm.recommendations')
+        ->has('vm.evidence')
+        ->has('vm.confidence')
+        ->where('vm.opportunity.headline', 'Estimated annual energy-price saving')
+        ->where('vm.confidence.confirm_before_action', 'Confirm network tariffs, capacity charges, taxes, production constraints and any equipment transition energy before implementation.')
         ->missing('vm.market')
-        ->missing('vm.schedule'));
+        ->missing('vm.schedule')
+        ->missing('vm.methodology'));
 });
 
 test('downloading the PDF streams a PDF and writes an audit log entry', function () {

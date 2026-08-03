@@ -31,11 +31,11 @@ interface ScheduleData {
 function LabourClassificationBadge({ value }: { value: LabourClassification }) {
     return value === 'UNMANNED' ? (
         <Badge variant="navy" showGlyph={false}>
-            Unmanned
+            Reschedulable
         </Badge>
     ) : (
         <Badge variant="mid" showGlyph={false}>
-            Labour Bound
+            Requires staffed production
         </Badge>
     );
 }
@@ -62,8 +62,8 @@ function AddBlockForm({ base }: { base: string }) {
         estimated_kwh: '',
         // Pre-selected to the conservative value, not blank — matches
         // AddScheduleBlockAction's own default and the creating
-        // migration's DB-level default. Marking a block Unmanned is a
-        // deliberate choice, never the silent/default outcome.
+        // migration's DB-level default. Marking a block as reschedulable is
+        // a deliberate choice, never the silent/default outcome.
         labour_classification: 'LABOUR_BOUND' as LabourClassification,
     });
 
@@ -128,7 +128,8 @@ function AddBlockForm({ base }: { base: string }) {
             </div>
             <div>
                 <Label htmlFor="labour_classification">
-                    Labour classification
+                    Can this activity be rescheduled without changing staffed
+                    production?
                 </Label>
                 <Select
                     id="labour_classification"
@@ -141,8 +142,10 @@ function AddBlockForm({ base }: { base: string }) {
                         )
                     }
                 >
-                    <option value="LABOUR_BOUND">Labour Bound</option>
-                    <option value="UNMANNED">Unmanned</option>
+                    <option value="LABOUR_BOUND">
+                        No — requires staffed production
+                    </option>
+                    <option value="UNMANNED">Yes — reschedulable</option>
                 </Select>
                 <FieldError>{errors.labour_classification}</FieldError>
             </div>
@@ -280,10 +283,10 @@ export default function Schedule({
                 <p className="text-text-secondary mb-4 text-xs">
                     Add a production run manually, or import an ERP-exported CSV
                     as a new schedule version. A block needs both an estimated
-                    energy use and an Unmanned labour classification to be
-                    considered when running optimization — Labour Bound blocks
-                    (shifting them means someone works a different time) are
-                    tracked here but never turned into a recommendation.
+                    energy use and must be marked as reschedulable without
+                    changing staffed production to be considered for timing
+                    recommendations. Activities that require staffed production
+                    are tracked here but are not automatically recommended.
                 </p>
                 <Link
                     href={`${base}/schedule/import`}
@@ -334,7 +337,7 @@ export default function Schedule({
                             {!schedule.hasEligibleBlocks && (
                                 <p className="text-text-secondary mt-1.5 text-xs">
                                     Add estimated energy use to at least one
-                                    Unmanned block to run optimization.
+                                    reschedulable activity to run optimization.
                                 </p>
                             )}
                         </div>

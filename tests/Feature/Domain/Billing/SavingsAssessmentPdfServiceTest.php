@@ -21,7 +21,8 @@ test('renders a well-formed PDF for a real assessment', function () {
     expect($bytes)->toBeString();
     expect(substr($bytes, 0, 4))->toBe('%PDF');
     expect(strlen($bytes))->toBeGreaterThan(1000);
-    expect($vm['calculation']['summary'])->toBe('Based on your uploaded schedule, estimated energy use, and hourly electricity prices.');
+    expect($vm['opportunity']['headline'])->toBe('Estimated annual energy-price saving');
+    expect($vm['confidence']['confirm_before_action'])->toContain('production constraints');
     expect(json_encode($vm, JSON_THROW_ON_ERROR))->not->toContain('provisional-heuristic-v1');
 });
 
