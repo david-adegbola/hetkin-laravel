@@ -13,6 +13,7 @@ use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Enums\PriceSource;
 use App\Domain\Pricing\Models\ElectricityPrice;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 test('the reports page lists assessments and verifications', function () {
     ['user' => $user, 'organization' => $organization] = portalUser();
@@ -91,11 +92,12 @@ test('the report detail page renders the view-model for the customer\'s own asse
     $response->assertInertia(fn ($page) => $page
         ->component('Portal/ReportDetail')
         ->has('vm.cover')
-        ->has('vm.savings')
+        ->has('vm.executive_summary.kpis')
         ->where('vm.calculation.summary', 'Based on your uploaded schedule, estimated energy use, and hourly electricity prices.')
         ->where('vm.calculation.estimate_note', 'Estimates are based on the information provided and should be validated before operational changes are made.')
-        ->missing('vm.methodology')
-        ->missing('vm.appendix'));
+        ->where('vm.calculation.confirmation_note', 'Before making schedule changes, confirm that the proposed timing works for production and check how your network tariff and capacity charges apply.')
+        ->missing('vm.market')
+        ->missing('vm.schedule'));
 });
 
 test('downloading the PDF streams a PDF and writes an audit log entry', function () {
@@ -108,6 +110,7 @@ test('downloading the PDF streams a PDF and writes an audit log entry', function
 
     $response->assertOk();
     $response->assertHeader('content-type', 'application/pdf');
+    $response->assertHeader('content-disposition', 'attachment; filename='.Str::slug($organization->name).'-savings-assessment-'.now()->format('Y-m-d').'.pdf');
     expect($response->headers->get('cache-control'))->toContain('no-store');
 
     $entry = AuditLogEntry::query()->latest('created_at')->first();

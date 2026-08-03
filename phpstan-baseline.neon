@@ -195,30 +195,18 @@ parameters:
 		-
 			message: '#^Cannot access property \$value on string\.$#'
 			identifier: property.nonObject
-			count: 2
+			count: 1
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-
 			message: '#^Cannot call method copy\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 5
+			count: 2
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-
 			message: '#^Cannot call method diffInSeconds\(\) on string\.$#'
 			identifier: method.nonObject
-			count: 1
-			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
-
-		-
-			message: '#^Cannot call method label\(\) on string\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Support\\Collection\<int,App\\Domain\\Optimization\\Models\\Recommendation\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
 			count: 1
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
@@ -229,33 +217,15 @@ parameters:
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-
-			message: '#^Parameter \#1 \$startAt of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:toBar\(\) expects Illuminate\\Support\\Carbon, string given\.$#'
-			identifier: argument.type
-			count: 2
-			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
-
-		-
-			message: '#^Parameter \#1 \$value of function collect contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
-
-		-
 			message: '#^Parameter \#2 \$end of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:formatDateRange\(\) expects Illuminate\\Support\\Carbon\|null, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-
-			message: '#^Parameter \#2 \$endAt of static method App\\Domain\\Billing\\Reports\\SavingsReportViewModelBuilder\:\:toBar\(\) expects Illuminate\\Support\\Carbon, string given\.$#'
-			identifier: argument.type
-			count: 2
-			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
-
-		-
 			message: '#^Using nullsafe property access "\?\-\>asset_label" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
-			count: 3
+			count: 1
 			path: app/Domain/Billing/Reports/SavingsReportViewModelBuilder.php
 
 		-

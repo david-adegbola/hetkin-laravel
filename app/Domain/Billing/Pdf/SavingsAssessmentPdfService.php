@@ -32,6 +32,7 @@ class SavingsAssessmentPdfService
     {
         return Pdf::loadView('pdf.savings-assessment', ['vm' => $viewModel])
             ->setPaper('a4', 'portrait')
+            ->setOption('isPhpEnabled', true)
             ->output();
     }
 
@@ -42,6 +43,7 @@ class SavingsAssessmentPdfService
     {
         return Pdf::loadView('pdf.savings-assessment', ['vm' => $viewModel])
             ->setPaper('a4', 'portrait')
+            ->setOption('isPhpEnabled', true)
             ->download($filename);
     }
 }

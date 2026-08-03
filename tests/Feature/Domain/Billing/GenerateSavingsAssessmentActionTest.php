@@ -108,7 +108,8 @@ test('creates a DRAFT baseline and savings assessment with the golden-dataset fi
     expect($assessment->net_customer_savings_cents)->toBe(2_759_400);
     expect($assessment->is_provisional)->toBeTrue();
     expect($assessment->report_snapshot)->toBeArray();
-    expect($assessment->report_snapshot['cover']['report_title'])->toBe('Savings Diagnostic');
+    expect($assessment->report_snapshot['cover']['report_title'])
+        ->toBe($organization->name.' Savings Assessment');
 
     app(CurrentOrganization::class)->set($organization);
     $baseline = Baseline::query()->findOrFail($assessment->baseline_id);
