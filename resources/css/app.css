@@ -161,6 +161,57 @@
   animation: delayed-fade-in 150ms var(--ease-out) 0.18s forwards;
 }
 
+/* The presentation is fullscreened as a viewer, leaving the 16:9 slide
+   itself free to scale and letterbox cleanly on room displays. */
+.pitch-deck-viewer:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  background: var(--color-primary);
+}
+.pitch-deck-viewer:fullscreen .pitch-deck-slide {
+  max-width: min(100vw, 177.78vh);
+  max-height: 100vh;
+  border-radius: 0;
+}
+.pitch-deck-slide .text-xs {
+  font-size: 0.875rem;
+}
+.pitch-deck-slide .text-sm {
+  font-size: 1rem;
+}
+.pitch-deck-slide svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.pitch-deck-cover > :not(:first-child) {
+  display: none;
+}
+@keyframes pitch-deck-cover-background {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pitch-deck-cover-content {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.pitch-deck-cover-inner {
+  animation: pitch-deck-cover-background 180ms ease-out both;
+}
+.pitch-deck-cover-mark {
+  animation: pitch-deck-cover-content 180ms ease-out 120ms both;
+}
+.pitch-deck-cover-wordmark {
+  animation: pitch-deck-cover-content 180ms ease-out 300ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pitch-deck-cover-inner,
+  .pitch-deck-cover-mark,
+  .pitch-deck-cover-wordmark {
+    animation-delay: 0ms !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

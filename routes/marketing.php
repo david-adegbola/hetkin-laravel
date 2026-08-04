@@ -26,6 +26,10 @@ Route::domain(config('app.domain'))->group(function () {
     Route::get('faq', fn () => Inertia::render('Marketing/Faq'))->name('faq');
     Route::get('methodology', fn () => Inertia::render('Marketing/Methodology'))->name('methodology');
 
+    // Intentionally unlisted investor deck. It has no navigation or sitemap
+    // entry, and renders without the public marketing chrome.
+    Route::get('pitch-deck', fn () => Inertia::render('PitchDeck'))->name('pitch-deck');
+
     // Unlisted (not linked from SiteHeader/SiteFooter nav, noindex) — see
     // each page's own docblock.
     Route::get('beta', fn () => Inertia::render('Marketing/Beta'))->name('beta');
@@ -37,3 +41,12 @@ Route::domain(config('app.domain'))->group(function () {
         Route::get('cookies', fn () => Inertia::render('Marketing/Legal/Cookies'))->name('cookies');
     });
 });
+
+// The local server is normally opened at 127.0.0.1 while APP_DOMAIN defaults
+// to localhost. Keep the production deck main-domain-only, but make the same
+// unlisted route reachable at the loopback address during local development.
+if (app()->environment('local')) {
+    Route::domain('127.0.0.1')
+        ->get('pitch-deck', fn () => Inertia::render('PitchDeck'))
+        ->name('pitch-deck.local');
+}
