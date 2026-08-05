@@ -1,61 +1,568 @@
 import { Head } from '@inertiajs/react';
 import {
-    ArrowLeft, ArrowRight, Check, ChevronRight, CircleCheck, Clock3, Database,
-    Factory, FileText, Gauge, Maximize2, Minimize2, Upload,
+    ArrowRight,
+    ChevronRight,
+    Clock3,
+    Database,
+    Factory,
+    Gauge,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type ReactNode,
+} from 'react';
 
 const PILOT_URL = 'https://hetkin.app/pilot-program/apply';
-const TOTAL = 16;
+const TOTAL = 14;
+const SLIDE_WIDTH = 1600;
+const SLIDE_HEIGHT = 900;
 
 function Tag({ children }: { children: ReactNode }) {
-    return <span className="rounded-full border border-border bg-background px-4 py-1.5 text-sm font-semibold tracking-[0.12em] text-text-secondary uppercase">{children}</span>;
+    return (
+        <span className="border-border bg-background text-text-secondary rounded-full border px-4 py-1.5 text-sm font-semibold tracking-[0.12em] uppercase">
+            {children}
+        </span>
+    );
 }
 
-function Metric({ value, label, tone = 'text-accent' }: { value: string; label: string; tone?: string }) {
-    return <div className="min-w-0"><div className={`tabular-nums-figure text-[clamp(4.5rem,8vw,8rem)] leading-none font-semibold tracking-[-0.07em] ${tone}`}>{value}</div><p className="mt-5 max-w-md text-lg leading-7 text-text-secondary">{label}</p></div>;
+function Metric({
+    value,
+    label,
+    tone = 'text-accent',
+}: {
+    value: string;
+    label: string;
+    tone?: string;
+}) {
+    return (
+        <div className="min-w-0">
+            <div
+                className={`pitch-deck-metric tabular-nums-figure text-[clamp(4.5rem,8vw,8rem)] leading-none font-semibold tracking-[-0.07em] ${tone}`}
+            >
+                {value}
+            </div>
+            <p className="text-text-secondary mt-5 max-w-md text-lg leading-7">
+                {label}
+            </p>
+        </div>
+    );
 }
 
-function Step({ icon, title, text, accent = false }: { icon: ReactNode; title: string; text: string; accent?: boolean }) {
-    return <div className={`rounded-[var(--radius-card)] border p-6 ${accent ? 'border-accent bg-accent-subtle' : 'border-border bg-background'}`}><div className={`mb-7 flex size-12 items-center justify-center rounded-[10px] ${accent ? 'bg-accent text-white' : 'bg-surface text-primary'}`}>{icon}</div><h3 className="text-xl font-semibold">{title}</h3><p className="mt-3 text-base leading-6 text-text-secondary">{text}</p></div>;
+function Step({
+    icon,
+    title,
+    text,
+    accent = false,
+}: {
+    icon: ReactNode;
+    title: string;
+    text: string;
+    accent?: boolean;
+}) {
+    return (
+        <div
+            className={`min-w-0 flex-1 rounded-[var(--radius-card)] border p-6 ${accent ? 'border-accent bg-accent-subtle' : 'border-border bg-background'}`}
+        >
+            <div
+                className={`mb-7 flex size-12 items-center justify-center rounded-[10px] ${accent ? 'bg-accent text-white' : 'bg-surface text-primary'}`}
+            >
+                {icon}
+            </div>
+            <h3 className="text-xl font-semibold">{title}</h3>
+            <p className="text-text-secondary mt-3 text-base leading-6">
+                {text}
+            </p>
+        </div>
+    );
 }
 
-function SlideFrame({ kicker, title, children, className = '' }: { kicker?: string; title: ReactNode; children?: ReactNode; className?: string }) {
-    return <div className={`flex h-full flex-col px-[7%] py-[6%] ${className}`}>
-        {kicker && <Tag>{kicker}</Tag>}
-        <h1 className="mt-7 max-w-6xl text-[clamp(3.25rem,5.8vw,6.5rem)] leading-[1.02] font-semibold tracking-[-0.06em] text-primary">{title}</h1>
-        {children}
-    </div>;
+function SlideFrame({
+    kicker,
+    title,
+    children,
+    className = '',
+}: {
+    kicker?: string;
+    title: ReactNode;
+    children?: ReactNode;
+    className?: string;
+}) {
+    return (
+        <div
+            className={`flex h-full flex-col px-[7%] pt-[7%] pb-[10%] ${className}`}
+        >
+            {kicker && <Tag>{kicker}</Tag>}
+            <h1 className="pitch-deck-title text-primary mt-7 max-w-6xl text-[clamp(3.25rem,5.8vw,6.5rem)] leading-[1.02] font-semibold tracking-[-0.06em]">
+                {title}
+            </h1>
+            {children}
+        </div>
+    );
 }
 
 function DeckSlide({ index }: { index: number }) {
     if (index === 0) {
-        return <div className="pitch-deck-cover-inner flex h-full flex-col items-center justify-center bg-primary px-[8%] text-white"><img src="/images/hetkin-cover-mark.png" alt="Hetkin logomark" className="pitch-deck-cover-mark size-[clamp(5.5rem,7vw,7rem)] object-contain brightness-0 invert" /><p className="pitch-deck-cover-wordmark mt-[clamp(2rem,3vw,3rem)] font-display text-[clamp(8.75rem,10vw,11.25rem)] leading-none font-semibold tracking-[-0.07em]">Hetkin</p></div>;
+        return (
+            <div className="pitch-deck-cover-inner flex h-full flex-col items-center justify-center bg-primary px-[8%] text-white">
+                <img
+                    src="/images/hetkin-cover-mark.png"
+                    alt="Hetkin logomark"
+                    className="pitch-deck-cover-mark size-[clamp(5.5rem,7vw,7rem)] object-contain brightness-0 invert"
+                />
+                <p className="pitch-deck-cover-wordmark mt-[clamp(2rem,3vw,3rem)] font-display text-[clamp(8.75rem,10vw,11.25rem)] leading-none font-semibold tracking-[-0.07em]">
+                    Hetkin
+                </p>
+            </div>
+        );
     }
+
     switch (index - 1) {
-        case 0: return <SlideFrame kicker="Every Hour Has a Price" title={<>Same production.<br /><span className="text-accent">Lower electricity bill.</span></>} className="justify-between"><div className="grid grid-cols-[1.2fr_0.8fr] items-end gap-10"><p className="max-w-3xl text-2xl leading-9 text-text-secondary">Hetkin helps Finnish manufacturers choose better times to use electricity — without making less.</p><div className="border-l border-border pl-8 text-lg leading-7 text-text-secondary">Clear suggestions for factories with spot-price electricity.</div></div><div className="flex items-center justify-between border-t border-border pt-6 text-sm font-medium text-text-secondary"><span>For Finnish manufacturing SMEs</span><span className="tabular-nums-figure">2026</span></div></SlideFrame>;
-        case 1: return <SlideFrame kicker="Hendrik's day" title={<>A costly hour.<br /><span className="text-accent">Work that still has to run.</span></>}><div className="mt-auto flex items-end gap-10 border-t border-border pt-8"><span className="tabular-nums-figure text-[clamp(4.5rem,7vw,7rem)] leading-none font-semibold text-error">14:00</span><span className="text-2xl leading-9 text-text-secondary">Orders set.<br />Machines ready.<br />No clear move.</span></div></SlideFrame>;
-        case 2: return <SlideFrame kicker="The conviction" title="A price signal is not a production decision."><div className="mt-auto grid grid-cols-3 gap-5"><Step icon={<Gauge size={18}/>} title="Price" text="Day-ahead prices reveal when electricity costs more."/><Step icon={<Database size={18}/>} title="Meter" text="Hourly data shows where consumption is concentrated."/><Step icon={<Clock3 size={18}/>} title="Schedule" text="Production constraints define what may actually move."/></div><p className="mt-7 text-sm text-text-secondary">These inputs already exist. They rarely meet in one decision.</p></SlideFrame>;
-        case 3: return <SlideFrame kicker="The overlooked asset" title={<>Flexible production time<br />is a <span className="text-accent">financial asset.</span></>}><div className="mt-auto rounded-[var(--radius-card)] border border-border bg-surface p-9"><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-8"><div><p className="text-lg font-semibold">Fixed</p><div className="mt-4 h-5 rounded-full bg-primary"/></div><div className="text-3xl text-text-secondary">+</div><div><p className="text-lg font-semibold text-accent">Movable</p><div className="mt-4 h-5 w-2/3 rounded-full bg-accent"/></div></div><p className="mt-8 text-2xl text-text-secondary">Not everything can move. Where flexibility exists, there is money.</p></div></SlideFrame>;
-        case 4: return <SlideFrame kicker="The product" title="From factory information to a clear next move."><div className="mt-auto flex items-center justify-between gap-3"><Step icon={<Database size={24}/>} title="Meter data" text="Hourly use"/><ChevronRight size={28} className="shrink-0 text-text-secondary"/><Step icon={<Clock3 size={24}/>} title="Schedule" text="What can move"/><ChevronRight size={28} className="shrink-0 text-text-secondary"/><Step icon={<Gauge size={24}/>} title="Spot prices" text="Tomorrow's prices"/><ChevronRight size={28} className="shrink-0 text-accent"/><Step accent icon={<ArrowRight size={24}/>} title="Recommendation" text="A move ready to review"/></div><p className="mt-7 text-lg text-text-secondary">One suggestion ties the production plan to the price it will face.</p></SlideFrame>;
-        case 5: return <SlideFrame kicker="Working prototype" title="It works today."><div className="mt-auto grid grid-cols-5 gap-3">{[[<Upload size={24}/>, 'Upload', 'meter data'], [<Clock3 size={24}/>, 'Import', 'schedule'], [<Gauge size={24}/>, 'Receive', 'suggestion'], [<Check size={24}/>, 'Approve / Reject', 'factory decides'], [<FileText size={24}/>, 'Generate', 'report']].map(([icon, heading, body], i) => <div key={String(heading)} className="relative rounded-[var(--radius-card)] border border-border bg-surface p-5"><div className="mb-8 text-accent">{icon}</div><p className="text-lg font-semibold">{heading}</p><p className="mt-2 text-base leading-6 text-text-secondary">{body}</p><span className="absolute right-5 bottom-4 tabular-nums-figure text-sm text-text-secondary">0{i + 1}</span></div>)}</div></SlideFrame>;
-        case 6: return <SlideFrame kicker="Modeled evidence" title="The result depends on the load."><div className="mt-auto grid grid-cols-[1fr_auto_1fr] items-center gap-7 overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface p-9"><Metric value="15.3%" label="Modeled savings · flexible batch-load production" tone="text-accent" /><span className="text-5xl text-text-secondary">=</span><Metric value="~0%" label="Modeled savings · flat, continuous production" tone="text-primary" /></div><p className="mt-6 text-lg text-text-secondary">Modeled from day-ahead prices and representative production profiles. Field validation is next.</p></SlideFrame>;
-        case 7: return <SlideFrame kicker="The trust layer" title="Recommend. Review. Decide. Verify."><div className="mt-auto grid grid-cols-4 gap-4"><Step icon={<ArrowRight size={24}/>} title="Recommend" text="Hetkin finds a possible move."/><Step icon={<FileText size={24}/>} title="Review" text="The reason is clear."/><Step icon={<Check size={24}/>} title="Decide" text="The factory says yes or no."/><Step icon={<CircleCheck size={24}/>} title="Verify" text="Results are checked after."/></div><p className="mt-7 max-w-4xl text-2xl leading-9 text-text-secondary">No automation. No remote control. The factory stays in control at every step.</p></SlideFrame>;
-        case 8: return <SlideFrame kicker="The market" title="The first customer."><div className="mt-auto grid grid-cols-3 gap-5"><Step icon={<Factory size={24}/>} title="Energy-intensive" text="Finnish manufacturing SMEs."/><Step icon={<Clock3 size={24}/>} title="Flexible production" text="Work that can move without cutting output."/><Step icon={<Gauge size={24}/>} title="Spot-price electricity" text="Timing changes the bill."/></div></SlideFrame>;
-        case 9: return <SlideFrame kicker="The competitive gap" title="From price to a decision."><div className="mt-auto grid grid-cols-4 gap-3 text-center"><div className="rounded-[var(--radius-card)] border border-border p-7"><p className="text-2xl font-semibold">Price tools</p></div><div className="rounded-[var(--radius-card)] border border-border p-7"><p className="text-2xl font-semibold">Dashboards</p></div><div className="rounded-[var(--radius-card)] border border-border p-7"><p className="text-2xl font-semibold">Enterprise systems</p></div><div className="rounded-[var(--radius-card)] border border-accent bg-accent-subtle p-7"><p className="text-2xl font-semibold text-accent">Hetkin</p></div></div></SlideFrame>;
-        case 10: return <SlideFrame kicker="The business model" title="A simple price. A fair share."><div className="mt-auto grid grid-cols-2 gap-5"><div className="rounded-[var(--radius-card)] border border-border bg-surface p-9"><p className="tabular-nums-figure text-sm font-semibold tracking-[0.14em] text-text-secondary uppercase">01 · Base subscription</p><h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em]">A monthly subscription</h2><p className="mt-5 text-lg leading-7 text-text-secondary">A regular fee for using Hetkin.</p></div><div className="rounded-[var(--radius-card)] border border-accent bg-accent-subtle p-9"><p className="tabular-nums-figure text-sm font-semibold tracking-[0.14em] text-accent uppercase">02 · Verified savings share</p><h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em]">A share after proof</h2><p className="mt-5 text-lg leading-7 text-text-secondary">Hetkin takes a percentage only after savings are checked.</p></div></div></SlideFrame>;
-        case 11: return <SlideFrame kicker="Validation + ask" title="The next proof belongs on the factory floor."><div className="mt-auto grid grid-cols-2 gap-5"><div className="rounded-[var(--radius-card)] bg-primary p-9 text-white"><p className="tabular-nums-figure text-[clamp(4.5rem,7vw,7rem)] font-semibold tracking-[-0.06em]">30+</p><p className="mt-4 text-2xl leading-8">Companies contacted</p></div><div className="rounded-[var(--radius-card)] border border-border bg-surface p-9"><p className="text-[clamp(3rem,5vw,5rem)] leading-none font-semibold tracking-[-0.06em]">No pilot<br />yet.</p></div></div></SlideFrame>;
-        case 12: return <SlideFrame kicker="Back to Hendrik" title={<>Every flexible hour<br />is a <span className="text-accent">financial decision.</span></>}><div className="mt-auto border-t border-border pt-7"><p className="text-2xl text-text-secondary">A better hour. A better choice.</p></div></SlideFrame>;
-        case 13: return <SlideFrame kicker="The team" title="The people building Hetkin."><div className="mt-auto grid grid-cols-3 gap-4"><article className="rounded-[var(--radius-card)] border border-border bg-surface p-6"><h2 className="text-2xl font-semibold">David Adegbola</h2><p className="mt-1 text-lg font-medium text-accent">Product Developer</p><p className="mt-5 text-sm leading-6 text-text-secondary">Bachelor’s student in Information Technology and Embedded Systems at VAMK (ongoing).</p><p className="mt-4 text-sm leading-6 text-text-secondary">Software product development, data analytics, and practical industrial operations at UPM Kaukas Pulp Mill.</p></article><article className="rounded-[var(--radius-card)] border border-border bg-surface p-6"><h2 className="text-2xl font-semibold">Khadiza Khan Mim(Diza)</h2><p className="mt-1 text-lg font-medium text-accent">CEO</p><p className="mt-5 text-sm leading-6 text-text-secondary">MSc in Strategic Business Development at the University of Vaasa (ongoing).</p><p className="mt-4 text-sm leading-6 text-text-secondary">CA (ICAB); apprenticeship at KPMG; former Finance Controller at Thomson Reuters, LSEG, and S.F. Ahmed &amp; Co.</p></article><article className="rounded-[var(--radius-card)] border border-border bg-surface p-6"><h2 className="text-2xl font-semibold">Desmond Olaniyi</h2><p className="mt-1 text-lg font-medium text-accent">Market Analyst</p><p className="mt-5 text-sm leading-6 text-text-secondary">BSc in International Business at VAMK (ongoing).</p><p className="mt-4 text-sm leading-6 text-text-secondary">Marketing Intern at Room for Cultures; service design for Elder State Communications; presentation and speech at Step to Success; prototyping sprint project at Fennorica.</p></article></div></SlideFrame>;
-        default: return <SlideFrame kicker="Thank you" title={<>Start the<br /><span className="text-accent">conversation.</span></>}><div className="mt-auto flex items-end justify-between border-t border-border pt-8"><div><a href={PILOT_URL} className="tabular-nums-figure inline-block text-2xl font-semibold text-accent underline decoration-1 underline-offset-4 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-accent">hetkin.app/pilot-program/apply</a></div><img id="pilot-qr" src="/images/pilot-program-qr.png" alt="QR code linking to hetkin.app/pilot-program/apply" width="140" height="140" className="size-[140px] rounded-[10px] border border-border bg-white p-2" /></div></SlideFrame>;
+        case 0:
+            return (
+                <SlideFrame
+                    kicker="Every Hour Has a Price"
+                    title={
+                        <>
+                            Same production.
+                            <br />
+                            <span className="text-accent">
+                                Lower electricity bill.
+                            </span>
+                        </>
+                    }
+                    className="justify-between"
+                >
+                    <div className="border-border text-text-secondary border-t pt-7 text-2xl leading-9">
+                        For Finnish manufacturing companies with spot-price
+                        electricity.
+                    </div>
+                </SlideFrame>
+            );
+        case 1:
+            return (
+                <SlideFrame
+                    kicker="The problem"
+                    title={
+                        <>
+                            Electricity is Hendrik’s
+                            <br />
+                            <span className="text-accent">
+                                #2 operating cost.
+                            </span>
+                        </>
+                    }
+                >
+                    <div className="border-border mt-auto grid grid-cols-2 gap-6 border-t pt-8">
+                        <Metric
+                            value="100-150"
+                            label="employees at Hendrik’s steel production business"
+                            tone="text-primary"
+                        />
+                        <p className="text-text-secondary text-2xl leading-9">
+                            Payroll comes first. Some production is fixed; some
+                            can shift. No one can see which flexible work should
+                            run in which hour.
+                        </p>
+                    </div>
+                </SlideFrame>
+            );
+        case 2:
+            return (
+                <SlideFrame
+                    kicker="Validation"
+                    title="The problem was heard before it was built."
+                >
+                    <div className="mt-auto grid grid-cols-3 gap-5">
+                        <Metric
+                            value="30"
+                            label="companies called"
+                            tone="text-primary"
+                        />
+                        <Metric
+                            value="16"
+                            label="companies reached"
+                            tone="text-primary"
+                        />
+                        <Metric
+                            value="~11"
+                            label="unprompted: electricity is a top-3 operating cost"
+                        />
+                    </div>
+                    <p className="text-text-secondary mt-7 text-lg">
+                        A VAMK student research report, based on interviews with
+                        comparable Finnish companies, found the same concern.
+                    </p>
+                </SlideFrame>
+            );
+        case 3:
+            return (
+                <SlideFrame
+                    kicker="The solution"
+                    title="One safe production move, ready for review."
+                >
+                    <div className="mt-auto flex items-center justify-between gap-3">
+                        <Step
+                            icon={<Database size={24} />}
+                            title="Meter data"
+                            text="Hourly electricity use"
+                        />
+                        <ChevronRight
+                            size={28}
+                            className="text-text-secondary shrink-0"
+                        />
+                        <Step
+                            icon={<Clock3 size={24} />}
+                            title="Production schedule"
+                            text="Fixed work stays untouched"
+                        />
+                        <ChevronRight
+                            size={28}
+                            className="text-text-secondary shrink-0"
+                        />
+                        <Step
+                            icon={<Gauge size={24} />}
+                            title="Tomorrow’s spot prices"
+                            text="See the cost of each hour"
+                        />
+                        <ChevronRight
+                            size={28}
+                            className="text-accent shrink-0"
+                        />
+                        <Step
+                            accent
+                            icon={<ArrowRight size={24} />}
+                            title="Recommendation"
+                            text="Which flexible machine moves, and when"
+                        />
+                    </div>
+                    <p className="text-text-secondary mt-7 text-lg">
+                        Any manufacturer can start with a free, automatically
+                        generated savings report showing what it could have
+                        saved.
+                    </p>
+                </SlideFrame>
+            );
+        case 4:
+            return (
+                <div className="bg-surface flex h-full flex-col px-[7%] pt-[7%] pb-[10%]">
+                    <div className="shrink-0">
+                        <p className="text-text-secondary text-sm font-semibold tracking-[0.12em] uppercase">
+                            The recommendation, in practice
+                        </p>
+                        <p className="text-primary mt-1 text-xl font-semibold">
+                            Flexible window → lower-cost hour
+                        </p>
+                    </div>
+                    <div className="mt-8 flex min-h-0 flex-1 items-center justify-center">
+                        <div className="border-border bg-background aspect-video max-h-full w-full overflow-hidden rounded-[var(--radius-card)] border shadow-[0_16px_42px_rgba(15,23,42,0.16)]">
+                            <img
+                                src="/images/dashboard-walkthrough-poster.png"
+                                alt="Hetkin dashboard showing a lower-cost production shift and €1,240 estimated savings"
+                                className="size-full object-contain"
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        case 5:
+            return (
+                <SlideFrame
+                    kicker="The market"
+                    title={
+                        <>
+                            A focused Finnish market.
+                            <br />
+                            <span className="text-accent">
+                                1,200-1,500 SMEs.
+                            </span>
+                        </>
+                    }
+                >
+                    <div className="mt-auto grid grid-cols-2 gap-6">
+                        <p className="text-text-secondary text-2xl leading-9">
+                            The fit is not company size or industry. It is
+                            flexibility: production that can shift a few hours
+                            without breaking delivery.
+                        </p>
+                        <div className="border-border bg-surface rounded-[var(--radius-card)] border p-7">
+                            <p className="text-xl font-semibold">
+                                Next markets
+                            </p>
+                            <p className="text-text-secondary mt-5 text-2xl leading-9">
+                                Sweden · Denmark · Norway
+                            </p>
+                            <p className="text-text-secondary mt-4 text-lg leading-7">
+                                The same meter-data and spot-price mechanism
+                                applies.
+                            </p>
+                        </div>
+                    </div>
+                </SlideFrame>
+            );
+        case 6:
+            return (
+                <SlideFrame
+                    kicker="The competitive gap"
+                    title="SMEs are left between two extremes."
+                >
+                    <div className="mt-auto grid grid-cols-3 gap-5">
+                        <Step
+                            icon={<Factory size={24} />}
+                            title="Large enterprise tools"
+                            text="ABB, Honeywell and similar systems serve big accounts with big teams."
+                        />
+                        <Step
+                            icon={<Gauge size={24} />}
+                            title="Free consumer apps"
+                            text="Useful for households, not production decisions."
+                        />
+                        <Step
+                            accent
+                            icon={<ArrowRight size={24} />}
+                            title="Hetkin"
+                            text="For SMEs with no dedicated energy team — often not even one person assigned to it."
+                        />
+                    </div>
+                </SlideFrame>
+            );
+        case 7:
+            return (
+                <SlideFrame
+                    kicker="The business model"
+                    title="Small base fee. Shared, verified upside."
+                >
+                    <div className="mt-14 grid grid-cols-2 gap-5">
+                        <div className="border-border bg-surface rounded-[var(--radius-card)] border p-8">
+                            <p className="tabular-nums-figure text-text-secondary text-sm font-semibold tracking-[0.14em] uppercase">
+                                01 · Base fee
+                            </p>
+                            <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em]">
+                                Small and predictable
+                            </h2>
+                            <p className="text-text-secondary mt-5 text-lg leading-7">
+                                A straightforward subscription for using Hetkin.
+                            </p>
+                        </div>
+                        <div className="border-accent bg-accent-subtle rounded-[var(--radius-card)] border p-8">
+                            <p className="tabular-nums-figure text-accent text-sm font-semibold tracking-[0.14em] uppercase">
+                                02 · Verified savings share
+                            </p>
+                            <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em]">
+                                Only after savings happen
+                            </h2>
+                            <p className="text-text-secondary mt-5 text-lg leading-7">
+                                Accept, reject, or partly accept recommendations
+                                so monthly savings can be tracked.
+                            </p>
+                        </div>
+                    </div>
+                    <p className="border-border text-text-secondary mt-8 border-t pt-6 text-xl leading-8">
+                        Guarantee: if a customer follows a recommendation and
+                        misses the predicted savings, Hetkin returns that
+                        shortfall at the end of the subscription period.
+                    </p>
+                </SlideFrame>
+            );
+        case 8:
+            return (
+                <SlideFrame
+                    kicker="Modeled evidence"
+                    title="The result depends on the load."
+                >
+                    <div className="mt-8 grid grid-cols-2 gap-6">
+                        <article className="pitch-deck-evidence-card border-accent bg-accent-subtle rounded-[var(--radius-card)] border p-7">
+                            <p className="text-accent text-sm font-semibold tracking-[0.14em] uppercase">
+                                Flexible production
+                            </p>
+                            <Metric
+                                value="15.3%"
+                                label="Savings when batches can move to a lower-cost hour"
+                                tone="text-accent"
+                            />
+                        </article>
+                        <article className="pitch-deck-evidence-card border-border bg-surface rounded-[var(--radius-card)] border p-7">
+                            <p className="text-text-secondary text-sm font-semibold tracking-[0.14em] uppercase">
+                                Continuous load
+                            </p>
+                            <Metric
+                                value="~0%"
+                                label="Savings when production cannot move"
+                                tone="text-primary"
+                            />
+                        </article>
+                    </div>
+                    <p className="border-border text-text-secondary mt-6 border-t pt-5 text-base leading-6">
+                        Modeled with real winter spot prices and real historical
+                        meter data.
+                    </p>
+                </SlideFrame>
+            );
+        case 9:
+            return (
+                <SlideFrame
+                    kicker="The vision"
+                    title="Two near-term commitments."
+                >
+                    <div className="mt-14 grid grid-cols-2 gap-6">
+                        <div className="border-border bg-surface rounded-[var(--radius-card)] border p-8">
+                            <p className="text-text-secondary text-sm font-semibold tracking-[0.14em] uppercase">
+                                By September
+                            </p>
+                            <Metric
+                                value="100"
+                                label="companies contacted"
+                                tone="text-primary"
+                            />
+                        </div>
+                        <div className="border-accent bg-accent-subtle rounded-[var(--radius-card)] border p-8">
+                            <p className="text-accent text-sm font-semibold tracking-[0.14em] uppercase">
+                                By October
+                            </p>
+                            <Metric value="5-6" label="signed pilots" />
+                        </div>
+                    </div>
+                </SlideFrame>
+            );
+        case 10:
+            return (
+                <SlideFrame
+                    kicker="The ask"
+                    title="Help put the next proof on the factory floor."
+                >
+                    <div className="mt-auto grid grid-cols-2 gap-5">
+                        <Step
+                            icon={<Factory size={28} />}
+                            title="Introductions to real customers"
+                            text="Production managers and plant decision-makers at target companies."
+                        />
+                        <Step
+                            icon={<Gauge size={28} />}
+                            title="An energy-sector mentor"
+                            text="Someone with existing relationships into target companies."
+                        />
+                    </div>
+                    <p className="text-text-secondary mt-7 text-lg">
+                        Equity is not divided or decided yet. That conversation
+                        happens at incorporation.
+                    </p>
+                </SlideFrame>
+            );
+        case 11:
+            return (
+                <SlideFrame
+                    kicker="The team"
+                    title="The people building Hetkin."
+                >
+                    <div className="mt-auto grid grid-cols-3 gap-4">
+                        <article className="border-border bg-surface rounded-[var(--radius-card)] border p-6">
+                            <h2 className="text-2xl font-semibold">
+                                David Adegbola
+                            </h2>
+                            <p className="text-accent mt-1 text-lg font-medium">
+                                Product Developer
+                            </p>
+                            <p className="text-text-secondary mt-5 text-sm leading-6">
+                                BSc in Information Technology at Vaasa
+                                Univeristy of Applied Sciences (ongoing).
+                            </p>
+                            <p className="text-text-secondary mt-4 text-sm leading-6">
+                                Software product development, data analytics,
+                                and practical industrial operations at UPM
+                                Kaukas Pulp Mill.
+                            </p>
+                        </article>
+                        <article className="border-border bg-surface rounded-[var(--radius-card)] border p-6">
+                            <h2 className="text-2xl font-semibold">
+                                Khadiza Khan Mim(Diza)
+                            </h2>
+                            <p className="text-accent mt-1 text-lg font-medium">
+                                CEO
+                            </p>
+                            <p className="text-text-secondary mt-5 text-sm leading-6">
+                                MSc in Strategic Business Development at the
+                                University of Vaasa (ongoing).
+                            </p>
+                            <p className="text-text-secondary mt-4 text-sm leading-6">
+                                CA (ICAB); apprenticeship at KPMG; former
+                                Finance Controller at Thomson Reuters, LSEG, and
+                                S.F. Ahmed &amp; Co.
+                            </p>
+                        </article>
+                        <article className="border-border bg-surface rounded-[var(--radius-card)] border p-6">
+                            <h2 className="text-2xl font-semibold">
+                                Desmond Olaniyi
+                            </h2>
+                            <p className="text-accent mt-1 text-lg font-medium">
+                                Market Analyst
+                            </p>
+                            <p className="text-text-secondary mt-5 text-sm leading-6">
+                                BSc in International Business at Vaasa
+                                Univeristy of Applied Sciences (ongoing).
+                            </p>
+                            <p className="text-text-secondary mt-4 text-sm leading-6">
+                                Marketing Intern at Room for Cultures; service
+                                design for Elder State Communications;
+                                presentation and speech at Step to Success;
+                                prototyping sprint project at Fennorica.
+                            </p>
+                        </article>
+                    </div>
+                </SlideFrame>
+            );
+        default:
+            return (
+                <SlideFrame
+                    kicker="Thank you"
+                    title={
+                        <>
+                            Start the
+                            <br />
+                            <span className="text-accent">conversation.</span>
+                        </>
+                    }
+                >
+                    <div className="border-border mt-auto flex items-end justify-between border-t pt-8">
+                        <div>
+                            <p className="text-text-secondary mb-4 text-2xl">
+                                Questions?
+                            </p>
+                            <a
+                                href={PILOT_URL}
+                                className="tabular-nums-figure text-accent focus-visible:ring-accent inline-block text-2xl font-semibold underline decoration-1 underline-offset-4 focus-visible:rounded focus-visible:ring-2"
+                            >
+                                hetkin.app/pilot-program/apply
+                            </a>
+                        </div>
+                        <img
+                            id="pilot-qr"
+                            src="/images/pilot-program-qr.png"
+                            alt="QR code linking to hetkin.app/pilot-program/apply"
+                            width="140"
+                            height="140"
+                            className="border-border size-[140px] rounded-[10px] border bg-white p-2"
+                        />
+                    </div>
+                </SlideFrame>
+            );
     }
 }
 
 export default function PitchDeck() {
     const [current, setCurrent] = useState(0);
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [slideScale, setSlideScale] = useState(1);
     const deckRef = useRef<HTMLElement>(null);
-    const go = useCallback((direction: number) => setCurrent((slide) => Math.min(TOTAL - 1, Math.max(0, slide + direction))), []);
+    const slideRef = useRef<HTMLElement>(null);
+    const go = useCallback(
+        (direction: number) =>
+            setCurrent((slide) =>
+                Math.min(TOTAL - 1, Math.max(0, slide + direction)),
+            ),
+        [],
+    );
     const toggleFullscreen = useCallback(async () => {
         if (!deckRef.current) return;
         if (document.fullscreenElement) {
@@ -66,14 +573,86 @@ export default function PitchDeck() {
     }, []);
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'ArrowRight' || event.key === ' ') { event.preventDefault(); go(1); }
-            if (event.key === 'ArrowLeft') { event.preventDefault(); go(-1); }
-            if (event.key.toLowerCase() === 'f' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); void toggleFullscreen(); }
+            if (event.key === 'ArrowRight' || event.key === ' ') {
+                event.preventDefault();
+                go(1);
+            }
+            if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                go(-1);
+            }
+            if (
+                event.key.toLowerCase() === 'f' &&
+                !event.metaKey &&
+                !event.ctrlKey &&
+                !event.altKey
+            ) {
+                event.preventDefault();
+                void toggleFullscreen();
+            }
         };
-        const onFullscreenChange = () => setIsFullscreen(document.fullscreenElement === deckRef.current);
         window.addEventListener('keydown', onKeyDown);
-        document.addEventListener('fullscreenchange', onFullscreenChange);
-        return () => { window.removeEventListener('keydown', onKeyDown); document.removeEventListener('fullscreenchange', onFullscreenChange); };
+        return () => window.removeEventListener('keydown', onKeyDown);
     }, [go, toggleFullscreen]);
-    return <><Head title="Every Hour Has a Price"><meta name="robots" content="noindex, nofollow" /></Head><main ref={deckRef} className="pitch-deck-viewer flex min-h-dvh items-center justify-center bg-slate-100 p-3 sm:p-6"><section aria-label={`Slide ${current + 1} of ${TOTAL}`} className={`pitch-deck-slide relative aspect-video w-full max-w-[min(177.78vh,1600px)] overflow-hidden rounded-[var(--radius-card)] bg-background shadow-sm ${current === 0 ? 'pitch-deck-cover' : ''}`}><div key={current} className="h-full"><DeckSlide index={current} /></div><div className="absolute right-[4%] bottom-[4%] tabular-nums-figure text-sm text-text-secondary">{String(current + 1).padStart(2, '0')} / {TOTAL}</div><div className="absolute bottom-[4%] left-[7%] flex items-center gap-2" aria-label="Slide navigation">{Array.from({ length: TOTAL }, (_, slide) => <button key={slide} onClick={() => setCurrent(slide)} aria-label={`Go to slide ${slide + 1}`} aria-current={slide === current ? 'true' : undefined} className={`size-3 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-accent ${slide === current ? 'bg-primary' : 'bg-border hover:bg-text-secondary'}`} />)}</div><div className="absolute top-[5%] right-[5%] flex gap-2"><button onClick={() => go(-1)} disabled={current === 0} aria-label="Previous slide" className="rounded-[10px] border border-border bg-background p-3 text-primary disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><ArrowLeft size={20}/></button><button onClick={() => go(1)} disabled={current === TOTAL - 1} aria-label="Next slide" className="rounded-[10px] border border-border bg-background p-3 text-primary disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><ArrowRight size={20}/></button><button onClick={() => void toggleFullscreen()} aria-label={isFullscreen ? 'Exit fullscreen' : 'View fullscreen'} title="Fullscreen (F)" className="rounded-[10px] border border-border bg-background p-3 text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">{isFullscreen ? <Minimize2 size={20}/> : <Maximize2 size={20}/>}</button></div></section></main></>;
+    useLayoutEffect(() => {
+        const slide = slideRef.current;
+        if (!slide) return;
+        const updateScale = () => {
+            const { width, height } = slide.getBoundingClientRect();
+            setSlideScale(Math.min(width / SLIDE_WIDTH, height / SLIDE_HEIGHT));
+        };
+        updateScale();
+        const observer = new ResizeObserver(updateScale);
+        observer.observe(slide);
+        return () => observer.disconnect();
+    }, []);
+    return (
+        <>
+            <Head title="Every Hour Has a Price">
+                <meta name="robots" content="noindex, nofollow" />
+            </Head>
+            <main
+                ref={deckRef}
+                className="pitch-deck-viewer flex min-h-dvh items-center justify-center bg-slate-100 p-3 sm:p-6"
+            >
+                <section
+                    ref={slideRef}
+                    aria-label={`Slide ${current + 1} of ${TOTAL}`}
+                    className={`pitch-deck-slide bg-background relative aspect-video w-full max-w-[min(177.78vh,1600px)] overflow-hidden rounded-[var(--radius-card)] shadow-sm ${current === 0 ? 'pitch-deck-cover' : ''}`}
+                >
+                    <div
+                        className="pitch-deck-canvas"
+                        style={{
+                            width: SLIDE_WIDTH,
+                            height: SLIDE_HEIGHT,
+                            transform: `scale(${slideScale})`,
+                        }}
+                    >
+                        <div key={current} className="h-full">
+                            <DeckSlide index={current} />
+                        </div>
+                        <div className="tabular-nums-figure text-text-secondary absolute right-[4%] bottom-[4%] text-sm">
+                            {String(current + 1).padStart(2, '0')} / {TOTAL}
+                        </div>
+                        <div
+                            className="absolute bottom-[4%] left-[7%] flex items-center gap-2"
+                            aria-label="Slide navigation"
+                        >
+                            {Array.from({ length: TOTAL }, (_, slide) => (
+                                <button
+                                    key={slide}
+                                    onClick={() => setCurrent(slide)}
+                                    aria-label={`Go to slide ${slide + 1}`}
+                                    aria-current={
+                                        slide === current ? 'true' : undefined
+                                    }
+                                    className={`focus-visible:outline-accent size-3 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-3 ${slide === current ? 'bg-primary' : 'bg-border hover:bg-text-secondary'}`}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </>
+    );
 }
