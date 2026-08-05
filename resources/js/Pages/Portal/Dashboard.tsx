@@ -1,3 +1,4 @@
+import EnergySchedulingChart, { type EnergyPricePoint } from '@/Components/portal/EnergySchedulingChart';
 import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import RecommendationDecisionButtons from '@/Components/portal/RecommendationDecisionButtons';
 import { Badge } from '@/Components/ui/Badge';
@@ -17,11 +18,15 @@ interface RecommendationDecision {
 
 interface RecommendationRow {
     id: string;
+    schedule_block_id: string | null;
     rationale: string;
     delivery_risk: string;
     projected_savings_cents: number;
+    original_start_at: string | null;
+    original_end_at: string | null;
     proposed_start_at: string;
     proposed_end_at: string;
+    price_curve: EnergyPricePoint[];
     decision: RecommendationDecision | null;
 }
 
@@ -167,6 +172,7 @@ export default function Dashboard({
 }) {
     const { organization } = usePage<PageProps>().props;
     const base = usePortalBasePath();
+    const featuredRecommendation = recentRecommendations[0] ?? null;
 
     const checklistSteps: ChecklistStep[] = [
         {
@@ -237,6 +243,8 @@ export default function Dashboard({
                     value={String(activeAlertCount)}
                 />
             </div>
+
+            <EnergySchedulingChart prices={featuredRecommendation?.price_curve ?? []} />
 
             <div className="mb-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
                 <Card>

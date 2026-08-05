@@ -11,6 +11,8 @@ use App\Domain\Optimization\Enums\RecommendationDecisionType;
 use App\Domain\Optimization\Models\Recommendation;
 use App\Domain\Optimization\Models\RecommendationDecision;
 use App\Domain\Organizations\CurrentOrganization;
+use App\Domain\Pricing\Enums\BiddingZone;
+use App\Domain\Pricing\Models\ElectricityPrice;
 use App\Domain\Scheduling\Models\ScheduleBlock;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Carbon;
@@ -66,10 +68,26 @@ class DashboardController extends Controller
 
         $recentRecommendations = Recommendation::query()
             ->whereHas('optimizationRun', fn ($query) => $query->where('organization_id', $organization->id))
-            ->with('decision')
+            ->with(['decision', 'scheduleBlock'])
             ->latest('created_at')
             ->take(3)
             ->get();
+
+        $recommendationDays = $recentRecommendations
+            ->filter(fn (Recommendation $recommendation) => $recommendation->scheduleBlock !== null)
+            ->map(fn (Recommendation $recommendation) => $recommendation->scheduleBlock->start_at->copy()->utc()->startOfDay())
+            ->unique(fn (Carbon $day) => $day->toDateString())
+            ->values();
+
+        $pricesByDay = $recommendationDays->isEmpty()
+            ? collect()
+            : ElectricityPrice::query()
+                ->where('bidding_zone', BiddingZone::FI)
+                ->where('hour_start', '>=', $recommendationDays->min())
+                ->where('hour_start', '<', $recommendationDays->max()->copy()->addDay())
+                ->orderBy('hour_start')
+                ->get()
+                ->groupBy(fn (ElectricityPrice $price) => $price->hour_start->copy()->utc()->toDateString());
 
         $activeAlertCount = Alert::query()->whereNull('read_at')->count();
 
@@ -93,19 +111,42 @@ class DashboardController extends Controller
             'adoptionRate' => $adoptionRate,
             'followedCount' => $followedCount,
             'totalDecisions' => $decisions->count(),
-            'recentRecommendations' => $recentRecommendations->map(fn (Recommendation $recommendation) => [
-                'id' => $recommendation->id,
-                'rationale' => $recommendation->rationale,
-                'delivery_risk' => $recommendation->delivery_risk->value,
-                'projected_savings_cents' => $recommendation->projected_savings_cents,
-                'proposed_start_at' => $recommendation->proposed_start_at->toIso8601String(),
-                'proposed_end_at' => $recommendation->proposed_end_at->toIso8601String(),
-                'decision' => $recommendation->decision ? [
-                    'decision' => $recommendation->decision->decision->value,
-                    'reason' => $recommendation->decision->reason,
-                    'adjusted_start_at' => $recommendation->decision->adjusted_start_at?->toIso8601String(),
-                ] : null,
-            ]),
+            'recentRecommendations' => $recentRecommendations->map(function (Recommendation $recommendation) use ($pricesByDay): array {
+                $block = $recommendation->scheduleBlock;
+                $pricePoints = $block
+                    ? $pricesByDay->get($block->start_at->copy()->utc()->toDateString(), collect())
+                    : collect();
+                $averagePrice = static function (Carbon $start, Carbon $end) use ($pricePoints): ?float {
+                    $window = $pricePoints->filter(fn (ElectricityPrice $price) => $price->hour_start->gte($start) && $price->hour_start->lt($end));
+
+                    return $window->isEmpty() ? null : round((float) $window->avg('eur_per_mwh'), 2);
+                };
+
+                return [
+                    'id' => $recommendation->id,
+                    'schedule_block_id' => $recommendation->schedule_block_id,
+                    'asset_label' => $block?->asset_label ?? 'Production block',
+                    'rationale' => $recommendation->rationale,
+                    'delivery_risk' => $recommendation->delivery_risk->value,
+                    'projected_savings_cents' => $recommendation->projected_savings_cents,
+                    'original_start_at' => $block?->start_at?->toIso8601String(),
+                    'original_end_at' => $block?->end_at?->toIso8601String(),
+                    'proposed_start_at' => $recommendation->proposed_start_at->toIso8601String(),
+                    'proposed_end_at' => $recommendation->proposed_end_at->toIso8601String(),
+                    'estimated_kwh' => $block?->estimated_kwh !== null ? (float) $block->estimated_kwh : null,
+                    'original_average_eur_per_mwh' => $block ? $averagePrice($block->start_at, $block->end_at) : null,
+                    'proposed_average_eur_per_mwh' => $averagePrice($recommendation->proposed_start_at, $recommendation->proposed_end_at),
+                    'price_curve' => $pricePoints->map(fn (ElectricityPrice $price) => [
+                        'hour_start' => $price->hour_start->toIso8601String(),
+                        'eur_per_mwh' => (float) $price->eur_per_mwh,
+                    ])->values(),
+                    'decision' => $recommendation->decision ? [
+                        'decision' => $recommendation->decision->decision->value,
+                        'reason' => $recommendation->decision->reason,
+                        'adjusted_start_at' => $recommendation->decision->adjusted_start_at?->toIso8601String(),
+                    ] : null,
+                ];
+            }),
             'activeAlertCount' => $activeAlertCount,
             'recentAlerts' => $recentAlerts->map(fn (Alert $alert) => [
                 'id' => $alert->id,
