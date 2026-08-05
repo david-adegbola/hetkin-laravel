@@ -471,7 +471,7 @@ function DeckSlide({ index }: { index: number }) {
                             </p>
                             <p className="text-text-secondary mt-4 text-sm leading-6">
                                 Software product development, data analytics,
-                                and practical industrial operations at UPM
+                                and practical industrial experience at UPM
                                 Kaukas Pulp Mill.
                             </p>
                         </article>
