@@ -16,7 +16,6 @@ use App\Domain\Pricing\Enums\PriceSource;
 use App\Domain\Pricing\Models\ElectricityPrice;
 use App\Domain\Scheduling\Models\ScheduleBlock;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,7 +38,7 @@ use Inertia\Response;
  */
 class DashboardController extends Controller
 {
-    public function show(Request $request, CurrentOrganization $currentOrganization): Response
+    public function show(CurrentOrganization $currentOrganization): Response
     {
         $organization = $currentOrganization->get();
         $scheduleTimezone = config('scheduling.timezone');
@@ -47,26 +46,6 @@ class DashboardController extends Controller
         $monthStart = $now->clone()->startOfMonth();
         $yearStart = $now->clone()->startOfYear();
         $today = $now->clone()->startOfDay();
-        $dateOptions = collect(range(-2, 1))->map(function (int $offset) use ($today): array {
-            $date = $today->copy()->addDays($offset);
-            $relativeLabel = match ($offset) {
-                -2 => $date->format('l'),
-                -1 => 'Yesterday',
-                0 => 'Today',
-                1 => 'Tomorrow',
-            };
-
-            return [
-                'date' => $date->toDateString(),
-                'label' => sprintf('%s — %s', $relativeLabel, $date->format('j F Y')),
-            ];
-        });
-        $requestedDate = $request->string('recommendation_date')->toString();
-        $selectedDate = $dateOptions->firstWhere('date', $requestedDate)
-            ?? $dateOptions->firstWhere('date', $today->toDateString());
-        $selectedRecommendationDay = Carbon::parse($selectedDate['date'], $scheduleTimezone)->startOfDay();
-        $selectedRecommendationDayStart = $selectedRecommendationDay->copy()->utc();
-        $selectedRecommendationDayEnd = $selectedRecommendationDay->copy()->addDay()->utc();
         $todayStart = $today->copy()->utc();
         $todayEnd = $today->copy()->addDay()->utc();
 
@@ -95,30 +74,45 @@ class DashboardController extends Controller
         $recentRecommendations = Recommendation::query()
             ->whereHas('optimizationRun', fn ($query) => $query->where('organization_id', $organization->id))
             ->whereHas('scheduleBlock', fn ($query) => $query
-                ->where('start_at', '>=', $selectedRecommendationDayStart)
-                ->where('start_at', '<', $selectedRecommendationDayEnd))
+                ->where('start_at', '>=', $todayStart)
+                ->where('start_at', '<', $todayEnd))
             ->with(['decision', 'scheduleBlock'])
             ->orderBy('projected_savings_cents', 'desc')
-            ->take(3)
             ->get();
 
-        $selectedDayPrices = ElectricityPrice::query()
+        $todayPrices = ElectricityPrice::query()
             ->where('bidding_zone', BiddingZone::FI)
             ->where('source', PriceSource::Entsoe)
-            ->where('hour_start', '>=', $selectedRecommendationDayStart)
-            ->where('hour_start', '<', $selectedRecommendationDayEnd)
+            ->where('hour_start', '>=', $todayStart)
+            ->where('hour_start', '<', $todayEnd)
             ->orderBy('hour_start')
             ->get();
 
-        $todayPrices = $selectedRecommendationDay->isSameDay($today)
-            ? $selectedDayPrices
-            : ElectricityPrice::query()
-                ->where('bidding_zone', BiddingZone::FI)
-                ->where('source', PriceSource::Entsoe)
-                ->where('hour_start', '>=', $todayStart)
-                ->where('hour_start', '<', $todayEnd)
-                ->orderBy('hour_start')
-                ->get();
+        $todayRecommendations = [];
+        foreach ($recentRecommendations as $recommendation) {
+            $block = $recommendation->scheduleBlock;
+            if ($block === null) {
+                continue;
+            }
+
+            if (count($todayRecommendations) >= 3) {
+                continue;
+            }
+
+            $todayRecommendations[] = [
+                'id' => $recommendation->id,
+                'rationale' => $recommendation->rationale,
+                'delivery_risk' => $recommendation->delivery_risk->value,
+                'projected_savings_cents' => $recommendation->projected_savings_cents,
+                'proposed_start_at' => $recommendation->proposed_start_at->toIso8601String(),
+                'proposed_end_at' => $recommendation->proposed_end_at->toIso8601String(),
+                'decision' => $recommendation->decision ? [
+                    'decision' => $recommendation->decision->decision->value,
+                    'reason' => $recommendation->decision->reason,
+                    'adjusted_start_at' => $recommendation->decision->adjusted_start_at?->toIso8601String(),
+                ] : null,
+            ];
+        }
 
         $activeAlertCount = Alert::query()->whereNull('read_at')->count();
 
@@ -142,49 +136,13 @@ class DashboardController extends Controller
             'adoptionRate' => $adoptionRate,
             'followedCount' => $followedCount,
             'totalDecisions' => $decisions->count(),
-            'recentRecommendations' => $recentRecommendations->map(function (Recommendation $recommendation) use ($selectedDayPrices): array {
-                $block = $recommendation->scheduleBlock;
-                $pricePoints = $block ? $selectedDayPrices : collect();
-                $averagePrice = static function (Carbon $start, Carbon $end) use ($pricePoints): ?float {
-                    $window = $pricePoints->filter(fn (ElectricityPrice $price) => $price->hour_start->gte($start) && $price->hour_start->lt($end));
-
-                    return $window->isEmpty() ? null : round((float) $window->avg('eur_per_mwh'), 2);
-                };
-
-                return [
-                    'id' => $recommendation->id,
-                    'schedule_block_id' => $recommendation->schedule_block_id,
-                    'asset_label' => $block?->asset_label ?? 'Production block',
-                    'rationale' => $recommendation->rationale,
-                    'delivery_risk' => $recommendation->delivery_risk->value,
-                    'projected_savings_cents' => $recommendation->projected_savings_cents,
-                    'original_start_at' => $block?->start_at?->toIso8601String(),
-                    'original_end_at' => $block?->end_at?->toIso8601String(),
-                    'proposed_start_at' => $recommendation->proposed_start_at->toIso8601String(),
-                    'proposed_end_at' => $recommendation->proposed_end_at->toIso8601String(),
-                    'estimated_kwh' => $block?->estimated_kwh !== null ? (float) $block->estimated_kwh : null,
-                    'original_average_eur_per_mwh' => $block ? $averagePrice($block->start_at, $block->end_at) : null,
-                    'proposed_average_eur_per_mwh' => $averagePrice($recommendation->proposed_start_at, $recommendation->proposed_end_at),
-                    'price_curve' => $pricePoints->map(fn (ElectricityPrice $price) => [
-                        'hour_start' => $price->hour_start->toIso8601String(),
-                        'eur_per_mwh' => (float) $price->eur_per_mwh,
-                    ])->values(),
-                    'decision' => $recommendation->decision ? [
-                        'decision' => $recommendation->decision->decision->value,
-                        'reason' => $recommendation->decision->reason,
-                        'adjusted_start_at' => $recommendation->decision->adjusted_start_at?->toIso8601String(),
-                    ] : null,
-                ];
-            }),
             'chartDateLabel' => sprintf('Today — %s', $today->format('j F Y')),
             'chartTimezone' => $scheduleTimezone,
             'dayAheadPrices' => $todayPrices->map(fn (ElectricityPrice $price) => [
                 'hour_start' => $price->hour_start->toIso8601String(),
                 'eur_per_mwh' => (float) $price->eur_per_mwh,
             ])->values(),
-            'recommendationDate' => $selectedDate['date'],
-            'recommendationDateLabel' => $selectedDate['label'],
-            'recommendationDateOptions' => $dateOptions->values(),
+            'todayRecommendations' => $todayRecommendations,
             'activeAlertCount' => $activeAlertCount,
             'recentAlerts' => $recentAlerts->map(fn (Alert $alert) => [
                 'id' => $alert->id,

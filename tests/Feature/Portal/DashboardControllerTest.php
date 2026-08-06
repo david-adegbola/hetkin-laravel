@@ -52,7 +52,7 @@ test('the dashboard lists up to 3 of the organization\'s most recent recommendat
 
     $response = $this->actingAs($user, 'web')->get(route('dashboard'));
 
-    $response->assertInertia(fn ($page) => $page->has('recentRecommendations', 3));
+    $response->assertInertia(fn ($page) => $page->has('todayRecommendations', 3));
 });
 
 test('the dashboard never shows another organization\'s recommendations', function () {
@@ -64,7 +64,7 @@ test('the dashboard never shows another organization\'s recommendations', functi
 
     $response = $this->actingAs($user, 'web')->get(route('dashboard'));
 
-    $response->assertInertia(fn ($page) => $page->has('recentRecommendations', 0));
+    $response->assertInertia(fn ($page) => $page->has('todayRecommendations', 0));
 });
 
 test('a decided recommendation includes its decision', function () {
@@ -84,10 +84,10 @@ test('a decided recommendation includes its decision', function () {
     $response = $this->actingAs($user, 'web')->get(route('dashboard'));
 
     $response->assertInertia(fn ($page) => $page
-        ->where('recentRecommendations.0.decision.decision', 'ACCEPTED'));
+        ->where('todayRecommendations.0.decision.decision', 'ACCEPTED'));
 });
 
-test('a recommendation includes its real price curve and savings calculation inputs', function () {
+test('the chart receives the current day price series independently of recommendations', function () {
     Carbon::setTestNow(Carbon::parse('2026-08-10 09:00:00', 'UTC'));
 
     try {
@@ -120,17 +120,14 @@ test('a recommendation includes its real price curve and savings calculation inp
         $response = $this->actingAs($user, 'web')->get(route('dashboard'));
 
         $response->assertInertia(fn ($page) => $page
-            ->where('recentRecommendations.0.asset_label', 'Batch line 3')
-            ->where('recentRecommendations.0.estimated_kwh', 400)
-            ->where('recentRecommendations.0.original_average_eur_per_mwh', 100)
-            ->where('recentRecommendations.0.proposed_average_eur_per_mwh', 50)
-            ->has('recentRecommendations.0.price_curve', 24));
+            ->has('dayAheadPrices', 24)
+            ->has('todayRecommendations', 1));
     } finally {
         Carbon::setTestNow();
     }
 });
 
-test('the dashboard uses the configured schedule timezone for today prices and selected-date recommendations', function () {
+test('the dashboard uses the configured schedule timezone for independent today prices and recommendation slides', function () {
     Carbon::setTestNow(Carbon::parse('2026-08-06 09:00:00', 'UTC'));
 
     try {
@@ -165,26 +162,12 @@ test('the dashboard uses the configured schedule timezone for today prices and s
             'eur_per_mwh' => 99,
         ]);
 
-        $todayResponse = $this->actingAs($user, 'web')->get(route('dashboard'));
-        $todayResponse->assertInertia(fn ($page) => $page
+        $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+        $response->assertInertia(fn ($page) => $page
             ->where('chartDateLabel', 'Today — 6 August 2026')
             ->has('dayAheadPrices', 1)
             ->where('dayAheadPrices.0.eur_per_mwh', 42)
-            ->where('recommendationDate', '2026-08-06')
-            ->where('recentRecommendations.0.asset_label', 'Today line'));
-
-        $yesterdayResponse = $this->actingAs($user, 'web')->get(route('dashboard').'?recommendation_date=2026-08-05');
-        $yesterdayResponse->assertInertia(fn ($page) => $page
-            ->where('chartDateLabel', 'Today — 6 August 2026')
-            ->has('dayAheadPrices', 1)
-            ->where('dayAheadPrices.0.eur_per_mwh', 42)
-            ->where('recommendationDateLabel', 'Yesterday — 5 August 2026')
-            ->where('recentRecommendations.0.asset_label', 'Yesterday line'));
-
-        $tomorrowResponse = $this->actingAs($user, 'web')->get(route('dashboard').'?recommendation_date=2026-08-07');
-        $tomorrowResponse->assertInertia(fn ($page) => $page
-            ->where('recommendationDateLabel', 'Tomorrow — 7 August 2026')
-            ->has('recentRecommendations', 0));
+            ->where('todayRecommendations.0.rationale', fn (string $value) => $value !== ''));
     } finally {
         Carbon::setTestNow();
     }

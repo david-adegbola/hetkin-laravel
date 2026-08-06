@@ -1,4 +1,6 @@
-import EnergySchedulingChart, { type EnergyPricePoint } from '@/Components/portal/EnergySchedulingChart';
+import EnergySchedulingChart, {
+    type EnergyPricePoint,
+} from '@/Components/portal/EnergySchedulingChart';
 import PortalPageHeader from '@/Components/portal/PortalPageHeader';
 import RecommendationDecisionButtons from '@/Components/portal/RecommendationDecisionButtons';
 import { Badge } from '@/Components/ui/Badge';
@@ -18,15 +20,11 @@ interface RecommendationDecision {
 
 interface RecommendationRow {
     id: string;
-    schedule_block_id: string | null;
     rationale: string;
     delivery_risk: string;
     projected_savings_cents: number;
-    original_start_at: string | null;
-    original_end_at: string | null;
     proposed_start_at: string;
     proposed_end_at: string;
-    price_curve: EnergyPricePoint[];
     decision: RecommendationDecision | null;
 }
 
@@ -155,13 +153,10 @@ export default function Dashboard({
     adoptionRate,
     followedCount,
     totalDecisions,
-    recentRecommendations,
     dayAheadPrices,
     chartDateLabel,
     chartTimezone,
-    recommendationDate,
-    recommendationDateLabel,
-    recommendationDateOptions,
+    todayRecommendations,
     activeAlertCount,
     recentAlerts,
     onboarding,
@@ -171,13 +166,10 @@ export default function Dashboard({
     adoptionRate: number | null;
     followedCount: number;
     totalDecisions: number;
-    recentRecommendations: RecommendationRow[];
     dayAheadPrices: EnergyPricePoint[];
     chartDateLabel: string;
     chartTimezone: string;
-    recommendationDate: string;
-    recommendationDateLabel: string;
-    recommendationDateOptions: Array<{ date: string; label: string }>;
+    todayRecommendations: RecommendationRow[];
     activeAlertCount: number;
     recentAlerts: AlertRow[];
     onboarding: OnboardingStatus;
@@ -263,104 +255,81 @@ export default function Dashboard({
 
             <div className="mb-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
                 <Card>
-                    <div className="flex flex-col gap-4 sm:flex-row">
-                        <nav
-                            aria-label="Recommendation date"
-                            className="border-border flex gap-1 overflow-x-auto border-b pb-3 sm:w-40 sm:flex-shrink-0 sm:flex-col sm:border-r sm:border-b-0 sm:pr-3 sm:pb-0"
-                        >
-                            {recommendationDateOptions.map((option) => (
-                                <Link
-                                    key={option.date}
-                                    href={`${base}?recommendation_date=${option.date}`}
-                                    className={`whitespace-nowrap rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                                        option.date === recommendationDate
-                                            ? 'bg-primary text-white'
-                                            : 'text-text-secondary hover:bg-primary/5 hover:text-primary'
-                                    }`}
-                                >
-                                    {option.label}
-                                </Link>
-                            ))}
-                        </nav>
-                        <div className="min-w-0 flex-1">
-                            <div className="mb-4">
-                                <h3 className="font-display text-primary text-base font-semibold">
-                                    Recent recommendations
-                                </h3>
-                                <p className="text-text-secondary mt-1 text-sm">
-                                    {recommendationDateLabel}
-                                </p>
-                            </div>
-                            {recentRecommendations.length === 0 ? (
-                                <p className="text-text-secondary py-6 text-center text-sm">
-                                    No recommendations for {recommendationDateLabel}.
-                                    The imported schedule remains available; run
-                                    optimization when day-ahead prices are available.
-                                </p>
-                            ) : (
-                                <div>
-                            {recentRecommendations.map((rec) => (
-                                <div
-                                    key={rec.id}
-                                    className="border-border flex flex-wrap items-center justify-between gap-3 border-b py-3.5 last:border-0"
-                                >
-                                    <div className="min-w-[220px] flex-1">
-                                        <div className="text-primary text-sm font-semibold">
-                                            {rec.rationale}
-                                        </div>
-                                        <div className="text-text-secondary mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-                                            <Badge
-                                                variant={
-                                                    rec.delivery_risk === 'LOW'
-                                                        ? 'cheap'
-                                                        : rec.delivery_risk ===
-                                                            'MEDIUM'
-                                                          ? 'mid'
-                                                          : 'expensive'
-                                                }
-                                                showGlyph={false}
-                                            >
-                                                {rec.delivery_risk.toLowerCase()}{' '}
-                                                risk
-                                            </Badge>
-                                            {rec.decision && (
-                                                <span>
-                                                    {rec.decision.decision ===
-                                                    'PARTIAL'
-                                                        ? `partially adopted — moved to ${rec.decision.adjusted_start_at ? formatScheduleDateTime(rec.decision.adjusted_start_at) : '?'}`
-                                                        : rec.decision.decision.toLowerCase()}
-                                                    {rec.decision.reason
-                                                        ? ` — "${rec.decision.reason}"`
-                                                        : ''}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="font-display text-success text-sm font-bold tabular-nums">
-                                            +
-                                            {formatEurCents(
-                                                rec.projected_savings_cents,
-                                            )}
-                                        </div>
-                                        {!rec.decision && (
-                                            <RecommendationDecisionButtons
-                                                base={base}
-                                                recommendationId={rec.id}
-                                                proposedStartAt={
-                                                    rec.proposed_start_at
-                                                }
-                                                proposedEndAt={
-                                                    rec.proposed_end_at
-                                                }
-                                            />
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                                </div>
-                            )}
+                    <div>
+                        <div className="border-border mb-4 border-b pb-4">
+                            <h3 className="font-display text-primary text-base font-semibold">
+                                Today’s recommendations
+                            </h3>
                         </div>
+                        {todayRecommendations.length === 0 ? (
+                            <p className="text-text-secondary py-6 text-center text-sm">
+                                No recommendations generated for today.
+                            </p>
+                        ) : (
+                            <div>
+                                {todayRecommendations.map((rec) => (
+                                    <div
+                                        key={rec.id}
+                                        className="border-border flex flex-wrap items-center justify-between gap-3 border-b py-3.5 last:border-0"
+                                    >
+                                        <div className="min-w-[220px] flex-1">
+                                            <div className="text-primary text-sm font-semibold">
+                                                {rec.rationale}
+                                            </div>
+                                            <div className="text-text-secondary mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                                                <Badge
+                                                    variant={
+                                                        rec.delivery_risk ===
+                                                        'LOW'
+                                                            ? 'cheap'
+                                                            : rec.delivery_risk ===
+                                                                'MEDIUM'
+                                                              ? 'mid'
+                                                              : 'expensive'
+                                                    }
+                                                    showGlyph={false}
+                                                >
+                                                    {rec.delivery_risk.toLowerCase()}{' '}
+                                                    risk
+                                                </Badge>
+                                                {rec.decision && (
+                                                    <span>
+                                                        {rec.decision
+                                                            .decision ===
+                                                        'PARTIAL'
+                                                            ? `partially adopted — moved to ${rec.decision.adjusted_start_at ? formatScheduleDateTime(rec.decision.adjusted_start_at) : '?'}`
+                                                            : rec.decision.decision.toLowerCase()}
+                                                        {rec.decision.reason
+                                                            ? ` — "${rec.decision.reason}"`
+                                                            : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="font-display text-success text-sm font-bold tabular-nums">
+                                                +
+                                                {formatEurCents(
+                                                    rec.projected_savings_cents,
+                                                )}
+                                            </div>
+                                            {!rec.decision && (
+                                                <RecommendationDecisionButtons
+                                                    base={base}
+                                                    recommendationId={rec.id}
+                                                    proposedStartAt={
+                                                        rec.proposed_start_at
+                                                    }
+                                                    proposedEndAt={
+                                                        rec.proposed_end_at
+                                                    }
+                                                />
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </Card>
 

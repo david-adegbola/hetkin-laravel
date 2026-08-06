@@ -1,6 +1,7 @@
 import { Card } from '@/Components/ui/Card';
-import ReactECharts from 'echarts-for-react';
 import type { EChartsOption } from 'echarts';
+import ReactECharts from 'echarts-for-react';
+import { memo } from 'react';
 
 export interface EnergyPricePoint {
     hour_start: string;
@@ -10,9 +11,9 @@ export interface EnergyPricePoint {
 function timeFormatter(timeZone: string): Intl.DateTimeFormat {
     return new Intl.DateTimeFormat('en-GB', {
         timeZone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
     });
 }
 
@@ -36,7 +37,7 @@ function formatEur(value: number): string {
     }).format(value);
 }
 
-export default function EnergySchedulingChart({
+export default memo(function EnergySchedulingChart({
     prices,
     dateLabel,
     timeZone,
@@ -62,7 +63,9 @@ export default function EnergySchedulingChart({
         (a, b) => Date.parse(a.hour_start) - Date.parse(b.hour_start),
     );
     const firstHour = Date.parse(orderedPrices[0].hour_start);
-    const lastHour = Date.parse(orderedPrices[orderedPrices.length - 1].hour_start);
+    const lastHour = Date.parse(
+        orderedPrices[orderedPrices.length - 1].hour_start,
+    );
     const time = timeFormatter(timeZone);
     const dateTime = dateTimeFormatter(timeZone);
 
@@ -70,7 +73,8 @@ export default function EnergySchedulingChart({
         animationDuration: 250,
         aria: {
             enabled: true,
-            description: 'Day-ahead electricity prices in euros per megawatt-hour.',
+            description:
+                'Day-ahead electricity prices in euros per megawatt-hour.',
         },
         grid: { left: 66, right: 28, top: 24, bottom: 40 },
         tooltip: {
@@ -131,7 +135,8 @@ export default function EnergySchedulingChart({
                     Day-ahead electricity price — {dateLabel}
                 </h3>
                 <p className="text-text-secondary mt-1 text-sm">
-                    Hourly electricity price in the configured schedule timezone.
+                    Hourly electricity price in the configured schedule
+                    timezone.
                 </p>
             </div>
             <div className="overflow-x-auto">
@@ -147,4 +152,4 @@ export default function EnergySchedulingChart({
             </div>
         </Card>
     );
-}
+});
