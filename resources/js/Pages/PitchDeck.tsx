@@ -20,6 +20,8 @@ const PILOT_URL = 'https://hetkin.app/pilot-program/apply';
 const TOTAL = 14;
 const SLIDE_WIDTH = 1600;
 const SLIDE_HEIGHT = 900;
+// Displayed slide 10 (modeled evidence) follows displayed slide 4.
+const SLIDE_ORDER = [0, 1, 2, 8, 3, 4, 5, 6, 7, 9, 10, 11];
 
 function Tag({ children }: { children: ReactNode }) {
     return (
@@ -120,7 +122,7 @@ function DeckSlide({ index }: { index: number }) {
         );
     }
 
-    switch (index - 1) {
+    switch (SLIDE_ORDER[index - 1]) {
         case 0:
             return (
                 <SlideFrame
@@ -259,11 +261,21 @@ function DeckSlide({ index }: { index: number }) {
                     </div>
                     <div className="mt-8 flex min-h-0 flex-1 items-center justify-center">
                         <div className="border-border bg-background aspect-video max-h-full w-full overflow-hidden rounded-[var(--radius-card)] border shadow-[0_16px_42px_rgba(15,23,42,0.16)]">
-                            <img
-                                src="/images/dashboard-walkthrough-poster.png"
-                                alt="Hetkin dashboard showing a lower-cost production shift and €1,240 estimated savings"
+                            <video
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                preload="metadata"
+                                poster="/images/dashboard-walkthrough-poster.png"
                                 className="size-full object-contain"
-                            />
+                                aria-label="Hetkin dashboard walkthrough showing a lower-cost production shift and estimated savings"
+                            >
+                                <source
+                                    src="/videos/dashboard-explaineri.mp4"
+                                    type="video/mp4"
+                                />
+                            </video>
                         </div>
                     </div>
                 </div>
