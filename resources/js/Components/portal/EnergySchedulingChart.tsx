@@ -7,21 +7,25 @@ export interface EnergyPricePoint {
     eur_per_mwh: number;
 }
 
-const helsinkiTime = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Helsinki',
+function timeFormatter(timeZone: string): Intl.DateTimeFormat {
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-});
+    });
+}
 
-const helsinkiDateTime = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Helsinki',
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-});
+function dateTimeFormatter(timeZone: string): Intl.DateTimeFormat {
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+}
 
 function formatEur(value: number): string {
     return new Intl.NumberFormat('en-FI', {
@@ -34,14 +38,18 @@ function formatEur(value: number): string {
 
 export default function EnergySchedulingChart({
     prices,
+    dateLabel,
+    timeZone,
 }: {
     prices: EnergyPricePoint[];
+    dateLabel: string;
+    timeZone: string;
 }) {
     if (prices.length === 0) {
         return (
             <Card className="mb-6">
                 <h3 className="font-display text-primary text-base font-semibold">
-                    Day-ahead electricity price
+                    Day-ahead electricity price — {dateLabel}
                 </h3>
                 <p className="text-text-secondary py-6 text-center text-sm">
                     Day-ahead prices appear here once price data is available.
@@ -55,6 +63,8 @@ export default function EnergySchedulingChart({
     );
     const firstHour = Date.parse(orderedPrices[0].hour_start);
     const lastHour = Date.parse(orderedPrices[orderedPrices.length - 1].hour_start);
+    const time = timeFormatter(timeZone);
+    const dateTime = dateTimeFormatter(timeZone);
 
     const option: EChartsOption = {
         animationDuration: 250,
@@ -72,7 +82,7 @@ export default function EnergySchedulingChart({
                 const point = params[0]?.data as [number, number] | undefined;
                 if (!point) return '';
 
-                return `${helsinkiDateTime.format(point[0])}–${helsinkiTime.format(point[0] + 60 * 60 * 1000)}<br/><b>${formatEur(point[1])}/MWh</b>`;
+                return `${dateTime.format(point[0])}–${time.format(point[0] + 60 * 60 * 1000)}<br/><b>${formatEur(point[1])}/MWh</b>`;
             },
         },
         xAxis: {
@@ -80,7 +90,7 @@ export default function EnergySchedulingChart({
             min: firstHour,
             max: lastHour + 60 * 60 * 1000,
             axisLabel: {
-                formatter: (value: number) => helsinkiTime.format(value),
+                formatter: (value: number) => time.format(value),
                 color: '#64748b',
             },
             splitLine: {
@@ -118,10 +128,10 @@ export default function EnergySchedulingChart({
         <Card className="mb-6 overflow-hidden">
             <div className="mb-4">
                 <h3 className="font-display text-primary text-base font-semibold">
-                    Day-ahead electricity price
+                    Day-ahead electricity price — {dateLabel}
                 </h3>
                 <p className="text-text-secondary mt-1 text-sm">
-                    Hourly electricity price in Helsinki time.
+                    Hourly electricity price in the configured schedule timezone.
                 </p>
             </div>
             <div className="overflow-x-auto">

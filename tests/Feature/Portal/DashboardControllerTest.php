@@ -38,8 +38,17 @@ test('the dashboard is also reachable bare on the dashboard subdomain', function
 test('the dashboard lists up to 3 of the organization\'s most recent recommendations', function () {
     ['user' => $user, 'organization' => $organization] = portalUser();
     app(CurrentOrganization::class)->set($organization);
-    $run = OptimizationRun::factory()->for($organization, 'organization')->create();
-    Recommendation::factory()->for($run, 'optimizationRun')->count(4)->create();
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    $run = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+    $start = Carbon::now(config('scheduling.timezone'))->startOfDay()->utc();
+    foreach (range(0, 3) as $hour) {
+        $block = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+            'start_at' => $start->copy()->addHours($hour),
+            'end_at' => $start->copy()->addHours($hour + 1),
+        ]);
+        Recommendation::factory()->for($run, 'optimizationRun')->for($block, 'scheduleBlock')->create();
+    }
 
     $response = $this->actingAs($user, 'web')->get(route('dashboard'));
 
@@ -61,8 +70,15 @@ test('the dashboard never shows another organization\'s recommendations', functi
 test('a decided recommendation includes its decision', function () {
     ['user' => $user, 'organization' => $organization] = portalUser();
     app(CurrentOrganization::class)->set($organization);
-    $run = OptimizationRun::factory()->for($organization, 'organization')->create();
-    $recommendation = Recommendation::factory()->for($run, 'optimizationRun')->create();
+    $site = Site::factory()->for($organization, 'organization')->create();
+    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+    $run = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+    $start = Carbon::now(config('scheduling.timezone'))->startOfDay()->utc();
+    $block = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+        'start_at' => $start,
+        'end_at' => $start->copy()->addHour(),
+    ]);
+    $recommendation = Recommendation::factory()->for($run, 'optimizationRun')->for($block, 'scheduleBlock')->create();
     RecommendationDecision::factory()->for($recommendation)->create();
 
     $response = $this->actingAs($user, 'web')->get(route('dashboard'));
@@ -72,39 +88,106 @@ test('a decided recommendation includes its decision', function () {
 });
 
 test('a recommendation includes its real price curve and savings calculation inputs', function () {
-    ['user' => $user, 'organization' => $organization] = portalUser();
-    app(CurrentOrganization::class)->set($organization);
-    $site = Site::factory()->for($organization, 'organization')->create();
-    $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
-    $start = Carbon::parse('2026-08-10 08:00:00', 'UTC');
-    $block = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
-        'asset_label' => 'Batch line 3',
-        'start_at' => $start,
-        'end_at' => $start->copy()->addHours(2),
-        'estimated_kwh' => 400,
-    ]);
-    $run = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
-    Recommendation::factory()->for($run, 'optimizationRun')->for($block, 'scheduleBlock')->create([
-        'proposed_start_at' => $start->copy()->setHour(2),
-        'proposed_end_at' => $start->copy()->setHour(4),
-        'projected_savings_cents' => 1_240,
-    ]);
+    Carbon::setTestNow(Carbon::parse('2026-08-10 09:00:00', 'UTC'));
 
-    foreach (range(0, 23) as $hour) {
-        ElectricityPrice::factory()->create([
-            'hour_start' => $start->copy()->startOfDay()->addHours($hour),
-            'eur_per_mwh' => $hour < 4 ? 50 : 100,
+    try {
+        ['user' => $user, 'organization' => $organization] = portalUser();
+        app(CurrentOrganization::class)->set($organization);
+        $site = Site::factory()->for($organization, 'organization')->create();
+        $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+        $start = Carbon::parse('2026-08-10 08:00:00', 'UTC');
+        $block = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+            'asset_label' => 'Batch line 3',
+            'start_at' => $start,
+            'end_at' => $start->copy()->addHours(2),
+            'estimated_kwh' => 400,
         ]);
+        $run = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+        Recommendation::factory()->for($run, 'optimizationRun')->for($block, 'scheduleBlock')->create([
+            'proposed_start_at' => $start->copy()->setHour(2),
+            'proposed_end_at' => $start->copy()->setHour(4),
+            'projected_savings_cents' => 1_240,
+        ]);
+
+        $priceDayStart = Carbon::parse('2026-08-10 00:00:00', config('scheduling.timezone'))->utc();
+        foreach (range(0, 23) as $hour) {
+            ElectricityPrice::factory()->create([
+                'hour_start' => $priceDayStart->copy()->addHours($hour),
+                'eur_per_mwh' => $hour < 7 ? 50 : 100,
+            ]);
+        }
+
+        $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+
+        $response->assertInertia(fn ($page) => $page
+            ->where('recentRecommendations.0.asset_label', 'Batch line 3')
+            ->where('recentRecommendations.0.estimated_kwh', 400)
+            ->where('recentRecommendations.0.original_average_eur_per_mwh', 100)
+            ->where('recentRecommendations.0.proposed_average_eur_per_mwh', 50)
+            ->has('recentRecommendations.0.price_curve', 24));
+    } finally {
+        Carbon::setTestNow();
     }
+});
 
-    $response = $this->actingAs($user, 'web')->get(route('dashboard'));
+test('the dashboard uses the configured schedule timezone for today prices and selected-date recommendations', function () {
+    Carbon::setTestNow(Carbon::parse('2026-08-06 09:00:00', 'UTC'));
 
-    $response->assertInertia(fn ($page) => $page
-        ->where('recentRecommendations.0.asset_label', 'Batch line 3')
-        ->where('recentRecommendations.0.estimated_kwh', 400)
-        ->where('recentRecommendations.0.original_average_eur_per_mwh', 100)
-        ->where('recentRecommendations.0.proposed_average_eur_per_mwh', 50)
-        ->has('recentRecommendations.0.price_curve', 24));
+    try {
+        config()->set('scheduling.timezone', 'Europe/Helsinki');
+        ['user' => $user, 'organization' => $organization] = portalUser();
+        app(CurrentOrganization::class)->set($organization);
+        $site = Site::factory()->for($organization, 'organization')->create();
+        $schedule = ProductionSchedule::factory()->for($organization, 'organization')->create();
+        $today = Carbon::parse('2026-08-06 12:00:00', 'Europe/Helsinki')->utc();
+        $yesterday = $today->copy()->subDay();
+        $tomorrow = $today->copy()->addDay();
+        $run = OptimizationRun::factory()->for($organization, 'organization')->for($schedule, 'schedule')->create();
+        $todayBlock = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+            'asset_label' => 'Today line',
+            'start_at' => $today,
+            'end_at' => $today->copy()->addHour(),
+        ]);
+        $yesterdayBlock = ScheduleBlock::factory()->for($schedule, 'schedule')->for($site)->create([
+            'asset_label' => 'Yesterday line',
+            'start_at' => $yesterday,
+            'end_at' => $yesterday->copy()->addHour(),
+        ]);
+        Recommendation::factory()->for($run, 'optimizationRun')->for($todayBlock, 'scheduleBlock')->create();
+        Recommendation::factory()->for($run, 'optimizationRun')->for($yesterdayBlock, 'scheduleBlock')->create();
+
+        ElectricityPrice::factory()->create([
+            'hour_start' => Carbon::parse('2026-08-06 00:00:00', 'Europe/Helsinki')->utc(),
+            'eur_per_mwh' => 42,
+        ]);
+        ElectricityPrice::factory()->create([
+            'hour_start' => Carbon::parse('2026-08-05 00:00:00', 'Europe/Helsinki')->utc(),
+            'eur_per_mwh' => 99,
+        ]);
+
+        $todayResponse = $this->actingAs($user, 'web')->get(route('dashboard'));
+        $todayResponse->assertInertia(fn ($page) => $page
+            ->where('chartDateLabel', 'Today — 6 August 2026')
+            ->has('dayAheadPrices', 1)
+            ->where('dayAheadPrices.0.eur_per_mwh', 42)
+            ->where('recommendationDate', '2026-08-06')
+            ->where('recentRecommendations.0.asset_label', 'Today line'));
+
+        $yesterdayResponse = $this->actingAs($user, 'web')->get(route('dashboard').'?recommendation_date=2026-08-05');
+        $yesterdayResponse->assertInertia(fn ($page) => $page
+            ->where('chartDateLabel', 'Today — 6 August 2026')
+            ->has('dayAheadPrices', 1)
+            ->where('dayAheadPrices.0.eur_per_mwh', 42)
+            ->where('recommendationDateLabel', 'Yesterday — 5 August 2026')
+            ->where('recentRecommendations.0.asset_label', 'Yesterday line'));
+
+        $tomorrowResponse = $this->actingAs($user, 'web')->get(route('dashboard').'?recommendation_date=2026-08-07');
+        $tomorrowResponse->assertInertia(fn ($page) => $page
+            ->where('recommendationDateLabel', 'Tomorrow — 7 August 2026')
+            ->has('recentRecommendations', 0));
+    } finally {
+        Carbon::setTestNow();
+    }
 });
 
 test('the dashboard shows the unread alert count and up to 4 recent alerts', function () {

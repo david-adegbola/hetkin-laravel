@@ -7,15 +7,15 @@ import { usePortalBasePath } from '@/lib/subdomain';
 import type { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import {
-    CalendarClock,
-    CreditCard,
+    CalendarRange,
+    ChartNoAxesCombined,
+    CircleHelp,
     Database,
-    FileText,
     LayoutDashboard,
-    LifeBuoy,
     Menu,
+    ReceiptText,
     ShieldCheck,
-    Users,
+    UsersRound,
 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -86,7 +86,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Schedule',
             exact: false,
             icon: (
-                <CalendarClock
+                <CalendarRange
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}
@@ -110,7 +110,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Reports',
             exact: false,
             icon: (
-                <FileText
+                <ChartNoAxesCombined
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}
@@ -122,7 +122,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Billing',
             exact: false,
             icon: (
-                <CreditCard
+                <ReceiptText
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}
@@ -134,7 +134,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Team & Permissions',
             exact: false,
             icon: (
-                <Users
+                <UsersRound
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}
@@ -146,7 +146,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             label: 'Support',
             exact: false,
             icon: (
-                <LifeBuoy
+                <CircleHelp
                     aria-hidden
                     className="h-4 w-4 flex-shrink-0"
                     strokeWidth={2}

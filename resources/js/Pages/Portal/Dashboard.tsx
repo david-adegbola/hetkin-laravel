@@ -156,6 +156,12 @@ export default function Dashboard({
     followedCount,
     totalDecisions,
     recentRecommendations,
+    dayAheadPrices,
+    chartDateLabel,
+    chartTimezone,
+    recommendationDate,
+    recommendationDateLabel,
+    recommendationDateOptions,
     activeAlertCount,
     recentAlerts,
     onboarding,
@@ -166,13 +172,18 @@ export default function Dashboard({
     followedCount: number;
     totalDecisions: number;
     recentRecommendations: RecommendationRow[];
+    dayAheadPrices: EnergyPricePoint[];
+    chartDateLabel: string;
+    chartTimezone: string;
+    recommendationDate: string;
+    recommendationDateLabel: string;
+    recommendationDateOptions: Array<{ date: string; label: string }>;
     activeAlertCount: number;
     recentAlerts: AlertRow[];
     onboarding: OnboardingStatus;
 }) {
     const { organization } = usePage<PageProps>().props;
     const base = usePortalBasePath();
-    const featuredRecommendation = recentRecommendations[0] ?? null;
 
     const checklistSteps: ChecklistStep[] = [
         {
@@ -244,23 +255,50 @@ export default function Dashboard({
                 />
             </div>
 
-            <EnergySchedulingChart prices={featuredRecommendation?.price_curve ?? []} />
+            <EnergySchedulingChart
+                prices={dayAheadPrices}
+                dateLabel={chartDateLabel}
+                timeZone={chartTimezone}
+            />
 
             <div className="mb-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
                 <Card>
-                    <div className="mb-4 flex items-center justify-between">
-                        <h3 className="font-display text-primary text-base font-semibold">
-                            Recent recommendations
-                        </h3>
-                    </div>
-                    {recentRecommendations.length === 0 ? (
-                        <p className="text-text-secondary py-6 text-center text-sm">
-                            No recommendations yet — these appear once your
-                            savings assessment and optimization engine are
-                            running against real schedule and price data.
-                        </p>
-                    ) : (
-                        <div>
+                    <div className="flex flex-col gap-4 sm:flex-row">
+                        <nav
+                            aria-label="Recommendation date"
+                            className="border-border flex gap-1 overflow-x-auto border-b pb-3 sm:w-40 sm:flex-shrink-0 sm:flex-col sm:border-r sm:border-b-0 sm:pr-3 sm:pb-0"
+                        >
+                            {recommendationDateOptions.map((option) => (
+                                <Link
+                                    key={option.date}
+                                    href={`${base}?recommendation_date=${option.date}`}
+                                    className={`whitespace-nowrap rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                                        option.date === recommendationDate
+                                            ? 'bg-primary text-white'
+                                            : 'text-text-secondary hover:bg-primary/5 hover:text-primary'
+                                    }`}
+                                >
+                                    {option.label}
+                                </Link>
+                            ))}
+                        </nav>
+                        <div className="min-w-0 flex-1">
+                            <div className="mb-4">
+                                <h3 className="font-display text-primary text-base font-semibold">
+                                    Recent recommendations
+                                </h3>
+                                <p className="text-text-secondary mt-1 text-sm">
+                                    {recommendationDateLabel}
+                                </p>
+                            </div>
+                            {recentRecommendations.length === 0 ? (
+                                <p className="text-text-secondary py-6 text-center text-sm">
+                                    No recommendations for {recommendationDateLabel}.
+                                    The imported schedule remains available; run
+                                    optimization when day-ahead prices are available.
+                                </p>
+                            ) : (
+                                <div>
                             {recentRecommendations.map((rec) => (
                                 <div
                                     key={rec.id}
@@ -320,8 +358,10 @@ export default function Dashboard({
                                     </div>
                                 </div>
                             ))}
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
                 </Card>
 
                 <Card>
