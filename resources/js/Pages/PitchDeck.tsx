@@ -408,7 +408,7 @@ function DeckSlide({ index }: { index: number }) {
                         </article>
                     </div>
                     <p className="border-border text-text-secondary mt-6 border-t pt-5 text-base leading-6">
-                        Modeled with real winter spot prices and real historical
+                        Modeled with real winter spot prices and historical
                         meter data.
                     </p>
                 </SlideFrame>
@@ -475,7 +475,7 @@ function DeckSlide({ index }: { index: number }) {
                                 David Adegbola
                             </h2>
                             <p className="text-accent mt-1 text-lg font-medium">
-                                Product Developer
+                                Technical Lead
                             </p>
                             <p className="text-text-secondary mt-5 text-sm leading-6">
                                 BSc in Information Technology at Vaasa
