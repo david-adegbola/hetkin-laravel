@@ -57,7 +57,7 @@ test('wraps an EntsoeFetchException message as-is', function () {
 });
 
 test('wraps any other unexpected error with a generic message', function () {
-    config(['services.entsoe.token' => 'test-token']);
+    config(['services.entsoe.token' => 'test-token', 'services.entsoe.ingest_max_retries' => 0]);
     $this->mock(EntsoePriceProvider::class, function ($mock) {
         $mock->shouldReceive('fetchPrices')->once()->andThrow(new RuntimeException('some upstream fluke'));
         $mock->shouldReceive('source')->andReturn(PriceSource::Entsoe);
@@ -66,4 +66,33 @@ test('wraps any other unexpected error with a generic message', function () {
 
     expect(fn () => app(IngestPricesAction::class)->execute())
         ->toThrow(RuntimeException::class, 'Unexpected ingestion error');
+});
+
+test('recovers from a transient fetch failure on retry, within the same run', function () {
+    config(['services.entsoe.token' => 'test-token', 'services.entsoe.ingest_max_retries' => 1]);
+    Http::fakeSequence('web-api.tp.entsoe.eu/*')
+        ->push('<Acknowledgement_MarketDocument><Reason><text>Service unavailable</text></Reason></Acknowledgement_MarketDocument>', 200)
+        ->push(ingestPricesXmlFixture(), 200);
+
+    $result = app(IngestPricesAction::class)->execute();
+
+    expect($result)->toBe(['entriesFetched' => 2, 'rowsWritten' => 2]);
+    Http::assertSentCount(2);
+});
+
+test('gives up after exhausting retries on a persistently failing fetch', function () {
+    config(['services.entsoe.token' => 'test-token', 'services.entsoe.ingest_max_retries' => 1]);
+    Http::fake(['web-api.tp.entsoe.eu/*' => Http::response('<Acknowledgement_MarketDocument><Reason><text>Service unavailable</text></Reason></Acknowledgement_MarketDocument>', 200)]);
+
+    expect(fn () => app(IngestPricesAction::class)->execute())
+        ->toThrow(RuntimeException::class, 'ENTSO-E: Service unavailable');
+    Http::assertSentCount(2);
+});
+
+test('does not retry a "not configured" config error', function () {
+    config(['services.entsoe.token' => null, 'services.entsoe.ingest_max_retries' => 3]);
+
+    expect(fn () => app(IngestPricesAction::class)->execute())
+        ->toThrow(RuntimeException::class, 'ENTSO_E_TOKEN not configured');
+    Http::assertNothingSent();
 });

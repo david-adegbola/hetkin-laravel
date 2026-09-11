@@ -24,6 +24,10 @@ return [
 
     'entsoe' => [
         'token' => env('ENTSO_E_TOKEN'),
+        // How many times the daily ingest-prices job retries a transient
+        // fetch failure (exponential backoff) before giving up for the
+        // day — see App\Domain\Pricing\Concerns\RetriesTransientEntsoeFailures.
+        'ingest_max_retries' => env('ENTSO_E_INGEST_MAX_RETRIES', 3),
     ],
 
     // Server-side capture (App\Domain\Analytics\Services\PostHogService) —
