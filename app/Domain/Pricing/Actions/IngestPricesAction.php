@@ -2,6 +2,7 @@
 
 namespace App\Domain\Pricing\Actions;
 
+use App\Domain\Pricing\Concerns\RetriesTransientEntsoeFailures;
 use App\Domain\Pricing\Enums\PriceSource;
 use App\Domain\Pricing\Exceptions\EntsoeFetchException;
 use App\Domain\Pricing\Services\PriceEntryUpserter;
@@ -22,9 +23,21 @@ use RuntimeException;
  * Wrapped in App\Domain\Jobs\Services\JobRunTracker by both callers (a
  * future scheduled command and App\Domain\Jobs\Actions\
  * TriggerIngestPricesAction), same as v2's withJobRunTracking().
+ *
+ * Retries a transient fetch failure (RetriesTransientEntsoeFailures, same
+ * mechanism BackfillPricesAction uses) before giving up — added after
+ * issue 139344544, a production run that died on a single egress-proxy
+ * timeout with nothing to retry it until the next day's 05:00 UTC cron.
+ * Unlike backfill's per-call `maxRetries` argument, this job has no caller
+ * to thread one through (cron and the admin "Run now" button both just
+ * call `execute()`), so the count comes from config instead.
  */
 class IngestPricesAction
 {
+    use RetriesTransientEntsoeFailures;
+
+    private const DEFAULT_MAX_RETRIES = 3;
+
     public function __construct(
         private readonly PriceProviderRegistry $providerRegistry,
         private readonly PriceEntryUpserter $upserter,
@@ -40,8 +53,10 @@ class IngestPricesAction
         $start = Carbon::now('UTC')->startOfDay();
         $end = $start->copy()->addDays(2);
 
+        $maxRetries = config('services.entsoe.ingest_max_retries', self::DEFAULT_MAX_RETRIES);
+
         try {
-            $entries = $provider->fetchPrices($start, $end);
+            $entries = $this->withRetry(fn () => $provider->fetchPrices($start, $end), $maxRetries);
         } catch (EntsoeFetchException $e) {
             throw new RuntimeException($e->getMessage(), previous: $e);
         } catch (\Throwable $e) {

@@ -2,10 +2,10 @@
 
 namespace App\Domain\Pricing\Actions;
 
+use App\Domain\Pricing\Concerns\RetriesTransientEntsoeFailures;
 use App\Domain\Pricing\DTOs\BackfillChunkProgress;
 use App\Domain\Pricing\Enums\BiddingZone;
 use App\Domain\Pricing\Enums\PriceSource;
-use App\Domain\Pricing\Exceptions\EntsoeFetchException;
 use App\Domain\Pricing\Models\ElectricityPrice;
 use App\Domain\Pricing\Services\PriceEntryUpserter;
 use App\Domain\Pricing\Services\PriceProviderRegistry;
@@ -34,11 +34,11 @@ use Throwable;
  */
 class BackfillPricesAction
 {
+    use RetriesTransientEntsoeFailures;
+
     public const DEFAULT_CHUNK_DAYS = 30;
 
     public const DEFAULT_MAX_RETRIES = 3;
-
-    private const RETRY_BASE_DELAY_MS = 1000;
 
     // Any real day-ahead resolution (hourly = 24/day, 15-minute = 96/day)
     // clears this comfortably — a resolution-agnostic way to say "this day
@@ -156,36 +156,5 @@ class BackfillPricesAction
             ->count();
 
         return $coveredDays >= $totalDays;
-    }
-
-    /** Config errors (e.g. a missing API token) won't fix themselves on retry. */
-    private function isRetryable(Throwable $e): bool
-    {
-        return ! ($e instanceof EntsoeFetchException && str_contains($e->getMessage(), 'not configured'));
-    }
-
-    /**
-     * @template T
-     *
-     * @param  Closure(): T  $fn
-     * @return T
-     */
-    private function withRetry(Closure $fn, int $maxRetries)
-    {
-        $lastException = null;
-
-        for ($attempt = 0; $attempt <= $maxRetries; $attempt++) {
-            try {
-                return $fn();
-            } catch (Throwable $e) {
-                $lastException = $e;
-                if (! $this->isRetryable($e) || $attempt === $maxRetries) {
-                    throw $e;
-                }
-                usleep((int) (self::RETRY_BASE_DELAY_MS * (2 ** $attempt) * 1000));
-            }
-        }
-
-        throw $lastException;
     }
 }
